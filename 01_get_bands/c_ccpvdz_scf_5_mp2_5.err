@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/Users/ethanvo/projects/interpolation/01_get_bands/native_dft_mp2.py", line 63, in <module>
+    ekmp2, t2 = mymp.kernel()
+                ^^^^^^^^^^^^^
+  File "/Users/ethanvo/builds/pyscf/projected_cvs/pyscf/pyscf/pbc/mp/kmp2.py", line 763, in kernel
+    kernel(self, mo_energy, mo_coeff, verbose=self.verbose, with_t2=with_t2)
+  File "/Users/ethanvo/builds/pyscf/projected_cvs/pyscf/pyscf/pbc/mp/kmp2.py", line 83, in kernel
+    raise MemoryError('Insufficient memory! MP2 memory usage %d MB (currently available %d MB)'
+MemoryError: Insufficient memory! MP2 memory usage 245711 MB (currently available 64000 MB)

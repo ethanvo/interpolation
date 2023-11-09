@@ -1,0 +1,747 @@
+#INFO: **** input file is /Users/ethanvo/projects/interpolation/01_get_bands/native_dft_mp2.py ****
+#!/usr/bin/env python
+import numpy as np
+from pyscf.pbc import gto, dft, df
+from pyscf.pbc.tools import pyscf_ase, lattice, get_coulG
+from pyscf.gto.basis import parse_nwchem
+from pyscf import lib
+from pyscf.pbc.lib.kpts_helper import get_kconserv, KptsHelper
+from pyscf.pbc.mp.kmp2 import KRMP2
+import h5py
+from fileutils import load, dump 
+import sys
+
+##############################
+# Create a "Cell"
+##############################
+
+cell = gto.Cell()
+# Candidate formula of solid: c, si, sic, bn, bp, aln, alp, mgo, mgs, lih, lif, licl
+formula = "c"
+ase_atom = lattice.get_ase_atom(formula)
+cell.atom = pyscf_ase.ase_atoms_to_pyscf(ase_atom)
+cell.a = ase_atom.cell[:]
+cell.unit = 'B'
+cell.basis = {'C': parse_nwchem.load("/Users/ethanvo/builds/ccgto/basis/gth-hf-rev/cc-pvdz-lc.dat", 'C')}
+cell.pseudo = "gth-hf-rev"
+cell.verbose = 7
+cell.build()
+
+##############################
+#  K-point SCF 
+##############################
+scf_mesh = int(sys.argv[1])
+kmesh = [scf_mesh, scf_mesh, scf_mesh]
+scaled_center=[0.0, 0.0, 0.0]
+kpts = cell.make_kpts(kmesh, scaled_center=scaled_center)
+mymf = dft.KRKS(cell, kpts=kpts)
+mymf.xc = 'pbe'
+ekrhf = mymf.kernel()
+
+mp2_mesh = int(sys.argv[2])
+kmesh = [mp2_mesh, mp2_mesh, mp2_mesh]
+kpts_interp = cell.make_kpts(kmesh, scaled_center=scaled_center)
+mo_energy, mo_coeff = mymf.get_bands(kpts_interp)
+mo_energy = np.asarray(mo_energy)
+mo_coeff = np.asarray(mo_coeff)
+mo_occ_dtype = mymf.mo_occ[0].dtype
+mo_occ = np.zeros_like(mo_energy, dtype=mo_occ_dtype)
+nocc = cell.nelectron // 2
+mo_occ[:, :nocc] = 2.0
+
+mydf = df.GDF(cell, kpts=kpts_interp)
+
+##############################
+#  MP2
+##############################
+mymp = KRMP2(mymf, frozen=None, mo_coeff=mo_coeff, mo_occ=mo_occ)
+mymp.with_df_ints = True
+mymp._scf.with_df = mydf
+mymp.kpts = kpts_interp
+mymp.mo_energy = mo_energy
+mymp.nkpts = len(kpts_interp)
+mymp.khelper = KptsHelper(cell, kpts_interp)
+ekmp2, t2 = mymp.kernel()
+total_energy = ekrhf + ekmp2
+
+datafile = sys.argv[3]
+datadict = {}
+datadict['ekrhf'] = ekrhf
+datadict['ekmp2'] = ekmp2
+datadict['total_energy'] = total_energy
+dump(datadict, f'data/{datafile}')
+#INFO: ******************** input file end ********************
+
+
+System: uname_result(system='Darwin', node='Concord-Dawn.local', release='23.1.0', version='Darwin Kernel Version 23.1.0: Mon Oct  9 21:27:24 PDT 2023; root:xnu-10002.41.9~6/RELEASE_ARM64_T6000', machine='arm64')  Threads 10
+Python 3.11.5 (main, Aug 24 2023, 15:09:45) [Clang 14.0.3 (clang-1403.0.22.14.1)]
+numpy 1.26.0  scipy 1.10.1
+Date: Tue Nov  7 11:42:57 2023
+PySCF version 2.0.1
+PySCF path  /Users/ethanvo/builds/pyscf/projected_cvs/pyscf
+GIT ORIG_HEAD 39249f5012c1a95ee10ab9573a362ed9ef07a422
+GIT HEAD (branch projected-cvs) 12799a671021ff0b92a23c4db7c36e2a9239ed2d
+
+[ENV] PYSCF_MAX_MEMORY 64000
+[ENV] PYSCF_TMPDIR /Users/ethanvo/projects/interpolation/01_get_bands/tmp
+[CONFIG] DEBUG = False
+[CONFIG] MAX_MEMORY = 64000
+[CONFIG] TMPDIR = /Users/ethanvo/projects/interpolation/01_get_bands/tmp
+[CONFIG] UNIT = angstrom
+[CONFIG] VERBOSE = 3
+[CONFIG] conf_file = None
+[INPUT] verbose = 7
+[INPUT] max_memory = 64000 
+[INPUT] num. atoms = 2
+[INPUT] num. electrons = 8
+[INPUT] charge = 0
+[INPUT] spin (= nelec alpha-beta = 2S) = 0
+[INPUT] symmetry False subgroup None
+[INPUT] Mole.unit = B
+[INPUT]  1 C      0.000000000000   0.000000000000   0.000000000000 AA    0.000000000000   0.000000000000   0.000000000000 Bohr
+[INPUT]  2 C      0.891699936031   0.891699936031   0.891699936031 AA    1.685068664391   1.685068664391   1.685068664391 Bohr
+[INPUT] ---------------- BASIS SET ---------------- 
+[INPUT] l, kappa, [nprim/nctr], expnt,             c_1 c_2 ...
+[INPUT] C
+[INPUT] 0    0    [3    /1   ]  9.031436          -0.01960629
+                                3.821255          -0.1291762
+                                0.473725          0.5822572
+[INPUT] 0    0    [1    /1   ]  0.149679             1
+[INPUT] 1    0    [3    /1   ]  4.353457          0.08730943
+                                1.266307          0.2797034
+                                0.398715          0.5024424
+[INPUT] 1    0    [1    /1   ]  0.124238             1
+[INPUT] 2    0    [1    /1   ]  0.556013             1
+
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+nuclear repulsion = -12.7871300640885
+number of shells = 10
+number of NR pGTOs = 42
+number of NR cGTOs = 26
+basis = {'C': [[0, [9.031436, -0.01960629], [3.821255, -0.1291762], [0.473725, 0.5822572]], [0, [0.149679, 1.0]], [1, [4.353457, 0.08730943], [1.266307, 0.2797034], [0.398715, 0.5024424]], [1, [0.124238, 1.0]], [2, [0.556013, 1.0]]]}
+ecp = {}
+bas 0, expnt(s) = [9.031436 3.821255 0.473725]
+bas 1, expnt(s) = [0.149679]
+bas 2, expnt(s) = [4.353457 1.266307 0.398715]
+bas 3, expnt(s) = [0.124238]
+bas 4, expnt(s) = [0.556013]
+bas 5, expnt(s) = [9.031436 3.821255 0.473725]
+bas 6, expnt(s) = [0.149679]
+bas 7, expnt(s) = [4.353457 1.266307 0.398715]
+bas 8, expnt(s) = [0.124238]
+bas 9, expnt(s) = [0.556013]
+CPU time:         0.25
+lattice vectors  a1 [0.000000000, 3.370137329, 3.370137329]
+                 a2 [3.370137329, 0.000000000, 3.370137329]
+                 a3 [3.370137329, 3.370137329, 0.000000000]
+dimension = 3
+low_dim_ft_type = None
+Cell volume = 76.5549
+rcut = 21.970857926874924 (nimgs = [6 6 6])
+lattice sum = 1313 cells
+precision = 1e-08
+pseudo = gth-hf-rev
+ke_cutoff = 382.8667051932727
+    = [35 35 35] mesh (42875 PWs)
+
+
+******** <class 'pyscf.pbc.dft.krks.KRKS'> ********
+method = KRKS-KohnShamDFT
+initial guess = minao
+damping factor = 0
+level_shift factor = 0
+DIIS = <class 'pyscf.scf.diis.CDIIS'>
+diis_start_cycle = 1
+diis_space = 8
+SCF conv_tol = 1e-07
+SCF conv_tol_grad = None
+SCF max_cycles = 50
+direct_scf = True
+direct_scf_tol = 1e-13
+chkfile to save SCF result = /Users/ethanvo/projects/interpolation/01_get_bands/tmp/tmpgkm9dqbw
+max_memory 64000 MB (current use 0 MB)
+
+
+******** PBC SCF flags ********
+N kpts = 1
+kpts = [[0. 0. 0.]]
+Exchange divergence treatment (exxdiv) = ewald
+Monkhorst pack size [1 1 1] ew_eta 2.613447953718719 ew_cut 2.693231061698856
+Ewald components = 5.9105191190806e-70, -1.47748424715118, 1.137374807438
+    madelung (= occupied orbital energy shift) = 0.6802188794263566
+    Total energy shift due to Ewald probe charge = -1/2 * Nelec*madelung = -2.72087551771
+DF object = <pyscf.pbc.df.fft.FFTDF object at 0x11cbf1850>
+
+
+******** <class 'pyscf.pbc.df.fft.FFTDF'> ********
+mesh = [35 35 35] (42875 PWs)
+len(kpts) = 1
+    kpts = [[0. 0. 0.]]
+XC functionals = pbe
+small_rho_cutoff = 1e-07
+Uniform grid, mesh = [35 35 35]
+Set gradient conv threshold to 0.000316228
+Big error detected in the electron number of initial guess density matrix (Ne/cell = 7.74553)!
+  This can cause huge error in Fock matrix and lead to instability in SCF for low-dimensional systems.
+  DM is normalized wrt the number of electrons 8.0
+    CPU time for setting up grids      0.57 sec, wall time      0.10 sec
+nelec by numeric integration = 7.999999999988318
+    CPU time for vxc      0.92 sec, wall time      0.11 sec
+    CPU time for vj and vk      1.11 sec, wall time      0.13 sec
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+E1 = 4.771517542799214  Ecoul = 1.6300265168761467  Exc = -3.839016686479302
+init E= -10.2246026908924
+cond(S) = [26137.1170775]
+    CPU time for initialize scf      3.83 sec, wall time      0.55 sec
+HOMO = 0.583299974207  LUMO = 0.767726609336
+     k-point                  mo_energy
+   0 ( 0.000  0.000  0.000)   [-0.24018205  0.58329997  0.58329997  0.58329997] [0.76772661 0.76772661 0.76772661 1.0578221  1.52873614 1.52873614
+ 1.80901266 1.80901266 1.80901266 1.82939269 2.35656935 2.35656935
+ 2.35656935 3.21290957 3.21290957 3.21290957 3.30365349 3.30365349
+ 4.36251161 4.36251161 4.36251161 4.96184892]
+nelec by numeric integration = 7.999999999993966
+    CPU time for vxc      0.91 sec, wall time      0.11 sec
+    CPU time for vj and vk      1.06 sec, wall time      0.13 sec
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+E1 = 4.779388325279391  Ecoul = 1.5146654475621295  Exc = -3.7686459417403646
+cycle= 1 E= -10.2617222329873  delta_E= -0.0371  |g|= 0.0346  |ddm|= 5.09
+    CPU time for cycle= 1      1.98 sec, wall time      0.24 sec
+diis-norm(errvec)=0.0297116
+diis-c [-8.82777927e-04  1.00000000e+00]
+HOMO = 0.567606396634  LUMO = 0.75866359853
+     k-point                  mo_energy
+   0 ( 0.000  0.000  0.000)   [-0.25032361  0.5676064   0.5676064   0.5676064 ] [0.7586636  0.7586636  0.7586636  1.04945338 1.51934382 1.51934382
+ 1.7873317  1.7873317  1.7873317  1.79696108 2.33014262 2.33014262
+ 2.33014262 3.20518856 3.20518856 3.20518856 3.3008472  3.3008472
+ 4.35505332 4.35505332 4.35505332 4.88993384]
+nelec by numeric integration = 7.999999999993945
+    CPU time for vxc      0.91 sec, wall time      0.11 sec
+    CPU time for vj and vk      1.10 sec, wall time      0.13 sec
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+E1 = 4.773906600229241  Ecoul = 1.5226949009483381  Exc = -3.771451979324942
+cycle= 2 E= -10.2619805422359  delta_E= -0.000258  |g|= 0.00228  |ddm|= 0.821
+    CPU time for cycle= 2      2.01 sec, wall time      0.24 sec
+diis-norm(errvec)=0.00344604
+diis-c [-5.97059741e-07 -1.27482377e-01  1.12748238e+00]
+HOMO = 0.568768345591  LUMO = 0.75959271586
+     k-point                  mo_energy
+   0 ( 0.000  0.000  0.000)   [-0.2497036   0.56876835  0.56876835  0.56876835] [0.75959272 0.75959272 0.75959272 1.0506111  1.5198697  1.5198697
+ 1.78776246 1.78776246 1.78776246 1.7964982  2.33105263 2.33105263
+ 2.33105263 3.20574768 3.20574768 3.20574768 3.30172914 3.30172914
+ 4.35568538 4.35568538 4.35568538 4.8895935 ]
+nelec by numeric integration = 7.999999999993953
+    CPU time for vxc      0.90 sec, wall time      0.11 sec
+    CPU time for vj and vk      1.08 sec, wall time      0.13 sec
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+E1 = 4.774942798307751  Ecoul = 1.521024075333289  Exc = -3.7708186130296104
+cycle= 3 E= -10.2619818034771  delta_E= -1.26e-06  |g|= 0.000702  |ddm|= 0.0493
+    CPU time for cycle= 3      1.98 sec, wall time      0.24 sec
+diis-norm(errvec)=0.00089834
+diis-c [-9.85745638e-08 -3.14131013e-02  4.11196030e-01  6.20217071e-01]
+HOMO = 0.568540864824  LUMO = 0.759417687836
+     k-point                  mo_energy
+   0 ( 0.000  0.000  0.000)   [-0.24983952  0.56854086  0.56854086  0.56854086] [0.75941769 0.75941769 0.75941769 1.05038493 1.51976882 1.51976882
+ 1.78764555 1.78764555 1.78764555 1.79645488 2.33084261 2.33084261
+ 2.33084261 3.20562934 3.20562934 3.20562934 3.30157638 3.30157638
+ 4.35554149 4.35554149 4.35554149 4.8894904 ]
+nelec by numeric integration = 7.999999999993947
+    CPU time for vxc      0.88 sec, wall time      0.11 sec
+    CPU time for vj and vk      1.07 sec, wall time      0.13 sec
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+E1 = 4.774767372743242  Ecoul = 1.5213055994698168  Exc = -3.770924733627929
+cycle= 4 E= -10.2619818255034  delta_E= -2.2e-08  |g|= 0.000639  |ddm|= 0.00991
+    CPU time for cycle= 4      1.96 sec, wall time      0.24 sec
+diis-norm(errvec)=0.00100409
+diis-c [-2.22695250e-12 -2.26710451e-03  1.57125132e-01  5.74517015e-01
+  2.70624958e-01]
+HOMO = 0.56847370675  LUMO = 0.759366005968
+     k-point                  mo_energy
+   0 ( 0.000  0.000  0.000)   [-0.24987965  0.56847371  0.56847371  0.56847371] [0.75936601 0.75936601 0.75936601 1.05031816 1.51973904 1.51973904
+ 1.78761105 1.78761105 1.78761105 1.79644213 2.33078062 2.33078062
+ 2.33078062 3.20559442 3.20559442 3.20559442 3.30153128 3.30153128
+ 4.35549902 4.35549902 4.35549902 4.88945999]
+nelec by numeric integration = 7.999999999993956
+    CPU time for vxc      0.89 sec, wall time      0.11 sec
+    CPU time for vj and vk      1.06 sec, wall time      0.13 sec
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+E1 = 4.774715571011595  Ecoul = 1.52138860546709  Exc = -3.770956043233767
+cycle= 5 E= -10.2619819308436  delta_E= -1.05e-07  |g|= 2.65e-06  |ddm|= 0.003
+    CPU time for cycle= 5      1.95 sec, wall time      0.24 sec
+diis-norm(errvec)=3.22856e-06
+diis-c [-6.63976635e-19  1.58935628e-06 -1.88150420e-04  3.11681632e-03
+  1.66192861e-03  9.95407816e-01]
+HOMO = 0.568474952824  LUMO = 0.759366976993
+     k-point                  mo_energy
+   0 ( 0.000  0.000  0.000)   [-0.24987889  0.56847495  0.56847495  0.56847495] [0.75936698 0.75936698 0.75936698 1.05031941 1.51973959 1.51973959
+ 1.78761167 1.78761167 1.78761167 1.79644234 2.33078174 2.33078174
+ 2.33078174 3.20559509 3.20559509 3.20559509 3.30153213 3.30153213
+ 4.35549981 4.35549981 4.35549981 4.88946053]
+nelec by numeric integration = 7.999999999993953
+    CPU time for vxc      0.88 sec, wall time      0.11 sec
+    CPU time for vj and vk      1.05 sec, wall time      0.13 sec
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+E1 = 4.774716524334651  Ecoul = 1.5213870747685396  Exc = -3.7709554658600895
+cycle= 6 E= -10.2619819308454  delta_E= -1.82e-12  |g|= 8.48e-10  |ddm|= 5.26e-05
+    CPU time for cycle= 6      1.94 sec, wall time      0.25 sec
+HOMO = 0.568474952838  LUMO = 0.759366977
+     k-point                  mo_energy
+   0 ( 0.000  0.000  0.000)   [-0.24987889  0.56847495  0.56847495  0.56847495] [0.75936698 0.75936698 0.75936698 1.05031941 1.51973959 1.51973959
+ 1.78761167 1.78761167 1.78761167 1.79644234 2.33078174 2.33078174
+ 2.33078174 3.20559509 3.20559509 3.20559509 3.30153213 3.30153213
+ 4.35549981 4.35549981 4.35549981 4.88946053]
+nelec by numeric integration = 7.999999999993952
+    CPU time for vxc      0.87 sec, wall time      0.11 sec
+    CPU time for vj and vk      1.06 sec, wall time      0.13 sec
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+E1 = 4.774716524343716  Ecoul = 1.5213870747534106  Exc = -3.7709554658540263
+Extra cycle  E= -10.2619819308454  delta_E= -1.78e-15  |g|= 3.18e-09  |ddm|= 5.06e-09
+    CPU time for scf_cycle     17.59 sec, wall time      2.25 sec
+    CPU time for SCF     17.60 sec, wall time      2.26 sec
+converged SCF energy = -10.2619819308454
+nelec by numeric integration = 7.999999999993951
+    CPU time for vxc      4.14 sec, wall time      0.60 sec
+    CPU time for vj and vk      1.84 sec, wall time      0.29 sec
+
+******** <class 'pyscf.pbc.mp.kmp2.KMP2'> ********
+nkpts = 27
+nocc = 4
+nmo = 26
+with_df_ints = True
+max_memory 64000 MB (current use 0 MB)
+
+
+******** <class 'pyscf.pbc.df.df.GDF'> ********
+mesh = [7, 7, 7] (343 PWs)
+auxbasis = None
+eta = 0.2
+exp_to_discard = None
+_cderi_to_save = /Users/ethanvo/projects/interpolation/01_get_bands/tmp/tmp_q29kfyf
+len(kpts) = 27
+    kpts = [[ 0.00000000e+00  0.00000000e+00  0.00000000e+00]
+ [ 3.10728451e-01  3.10728451e-01 -3.10728451e-01]
+ [ 6.21456902e-01  6.21456902e-01 -6.21456902e-01]
+ [ 3.10728451e-01 -3.10728451e-01  3.10728451e-01]
+ [ 6.21456902e-01  1.97585401e-17 -1.97585401e-17]
+ [ 9.32185352e-01  3.10728451e-01 -3.10728451e-01]
+ [ 6.21456902e-01 -6.21456902e-01  6.21456902e-01]
+ [ 9.32185352e-01 -3.10728451e-01  3.10728451e-01]
+ [ 1.24291380e+00  3.95170803e-17 -3.95170803e-17]
+ [-3.10728451e-01  3.10728451e-01  3.10728451e-01]
+ [ 1.97585401e-17  6.21456902e-01 -1.97585401e-17]
+ [ 3.10728451e-01  9.32185352e-01 -3.10728451e-01]
+ [ 1.97585401e-17 -1.97585401e-17  6.21456902e-01]
+ [ 3.10728451e-01  3.10728451e-01  3.10728451e-01]
+ [ 6.21456902e-01  6.21456902e-01 -3.95170803e-17]
+ [ 3.10728451e-01 -3.10728451e-01  9.32185352e-01]
+ [ 6.21456902e-01 -3.57526111e-17  6.21456902e-01]
+ [ 9.32185352e-01  3.10728451e-01  3.10728451e-01]
+ [-6.21456902e-01  6.21456902e-01  6.21456902e-01]
+ [-3.10728451e-01  9.32185352e-01  3.10728451e-01]
+ [ 3.95170803e-17  1.24291380e+00 -3.95170803e-17]
+ [-3.10728451e-01  3.10728451e-01  9.32185352e-01]
+ [ 1.97585401e-17  6.21456902e-01  6.21456902e-01]
+ [ 3.10728451e-01  9.32185352e-01  3.10728451e-01]
+ [ 3.95170803e-17 -3.95170803e-17  1.24291380e+00]
+ [ 3.10728451e-01  3.10728451e-01  9.32185352e-01]
+ [ 6.21456902e-01  6.21456902e-01  6.21456902e-01]]
+Even tempered Gaussians are generated as DF auxbasis for  C
+  ETB auxbasis for C  [[0, [9.579456, 1]], [0, [4.789728, 1]], [0, [2.394864, 1]], [0, [1.197432, 1]], [0, [0.598716, 1]], [0, [0.299358, 1]], [1, [8.727455361661383, 1]], [1, [4.363727680830691, 1]], [1, [2.1818638404153456, 1]], [1, [1.0909319202076728, 1]], [1, [0.5454659601038364, 1]], [1, [0.2727329800519182, 1]], [2, [7.951232, 1]], [2, [3.975616, 1]], [2, [1.987808, 1]], [2, [0.993904, 1]], [2, [0.496952, 1]], [2, [0.248476, 1]], [3, [2.1026146480075707, 1]], [3, [1.0513073240037853, 1]], [3, [0.5256536620018927, 1]], [4, [1.112026, 1]]]
+num shells = 44, num cGTOs = 168
+Drop 0 primitive fitting functions
+make aux basis, num shells = 44, num cGTOs = 168
+auxcell.rcut 12.846608924246357
+make compensating basis, num shells = 10, num cGTOs = 50
+chgcell.rcut 11.482117703874595
+    CPU time for 3c2e   1251.63 sec, wall time    154.41 sec
+Num uniq kpts 63
+uniq_kpts [[ 0.00000000e+00  0.00000000e+00  0.00000000e+00]
+ [-3.10728451e-01 -3.10728451e-01  3.10728451e-01]
+ [-6.21456902e-01 -6.21456902e-01  6.21456902e-01]
+ [-3.10728451e-01  3.10728451e-01 -3.10728451e-01]
+ [ 0.00000000e+00  6.21456902e-01 -6.21456902e-01]
+ [ 3.10728451e-01  9.32185352e-01 -9.32185352e-01]
+ [-6.21456902e-01 -1.97585401e-17  1.97585401e-17]
+ [-9.32185352e-01 -3.10728451e-01  3.10728451e-01]
+ [-6.21456902e-01  6.21456902e-01 -6.21456902e-01]
+ [-3.10728451e-01  9.32185352e-01 -9.32185352e-01]
+ [ 0.00000000e+00  1.24291380e+00 -1.24291380e+00]
+ [-9.32185352e-01  3.10728451e-01 -3.10728451e-01]
+ [-1.24291380e+00 -3.95170803e-17  3.95170803e-17]
+ [ 3.10728451e-01 -3.10728451e-01 -3.10728451e-01]
+ [ 6.21456902e-01  0.00000000e+00 -6.21456902e-01]
+ [ 9.32185352e-01  3.10728451e-01 -9.32185352e-01]
+ [ 6.21456902e-01 -6.21456902e-01  0.00000000e+00]
+ [ 9.32185352e-01 -3.10728451e-01 -3.10728451e-01]
+ [ 1.24291380e+00  5.55111512e-17 -6.21456902e-01]
+ [ 9.32185352e-01 -9.32185352e-01  3.10728451e-01]
+ [ 1.24291380e+00 -6.21456902e-01  0.00000000e+00]
+ [ 1.55364225e+00 -3.10728451e-01 -3.10728451e-01]
+ [-1.97585401e-17 -6.21456902e-01  1.97585401e-17]
+ [ 3.10728451e-01 -9.32185352e-01  3.10728451e-01]
+ [ 6.21456902e-01 -1.24291380e+00  6.21456902e-01]
+ [-3.10728451e-01 -9.32185352e-01  3.10728451e-01]
+ [-5.55111512e-17 -1.24291380e+00  6.21456902e-01]
+ [ 3.10728451e-01 -1.55364225e+00  9.32185352e-01]
+ [-1.97585401e-17  1.97585401e-17 -6.21456902e-01]
+ [ 3.10728451e-01  3.10728451e-01 -9.32185352e-01]
+ [ 6.21456902e-01  6.21456902e-01 -1.24291380e+00]
+ [-3.10728451e-01 -3.10728451e-01 -3.10728451e-01]
+ [-6.21456902e-01 -6.21456902e-01  3.95170803e-17]
+ [-3.10728451e-01  3.10728451e-01 -9.32185352e-01]
+ [-5.55111512e-17  6.21456902e-01 -1.24291380e+00]
+ [ 3.10728451e-01  9.32185352e-01 -1.55364225e+00]
+ [-6.21456902e-01  3.57526111e-17 -6.21456902e-01]
+ [-9.32185352e-01 -3.10728451e-01 -3.10728451e-01]
+ [ 6.21456902e-01 -6.21456902e-01 -6.21456902e-01]
+ [ 9.32185352e-01 -3.10728451e-01 -9.32185352e-01]
+ [ 1.24291380e+00  0.00000000e+00 -1.24291380e+00]
+ [ 9.32185352e-01 -9.32185352e-01 -3.10728451e-01]
+ [ 1.24291380e+00 -6.21456902e-01 -6.21456902e-01]
+ [ 1.55364225e+00 -3.10728451e-01 -9.32185352e-01]
+ [ 1.24291380e+00 -1.24291380e+00  0.00000000e+00]
+ [ 1.55364225e+00 -9.32185352e-01 -3.10728451e-01]
+ [ 1.86437070e+00 -6.21456902e-01 -6.21456902e-01]
+ [ 3.10728451e-01 -9.32185352e-01 -3.10728451e-01]
+ [ 6.21456902e-01 -1.24291380e+00  0.00000000e+00]
+ [ 9.32185352e-01 -1.55364225e+00  3.10728451e-01]
+ [-3.95170803e-17 -1.24291380e+00  3.95170803e-17]
+ [ 3.10728451e-01 -1.55364225e+00  3.10728451e-01]
+ [ 6.21456902e-01 -1.86437070e+00  6.21456902e-01]
+ [ 3.10728451e-01 -3.10728451e-01 -9.32185352e-01]
+ [ 6.21456902e-01  0.00000000e+00 -1.24291380e+00]
+ [ 9.32185352e-01  3.10728451e-01 -1.55364225e+00]
+ [-1.97585401e-17 -6.21456902e-01 -6.21456902e-01]
+ [-3.10728451e-01 -9.32185352e-01 -3.10728451e-01]
+ [-3.95170803e-17  3.95170803e-17 -1.24291380e+00]
+ [ 3.10728451e-01  3.10728451e-01 -1.55364225e+00]
+ [ 6.21456902e-01  6.21456902e-01 -1.86437070e+00]
+ [-3.10728451e-01 -3.10728451e-01 -9.32185352e-01]
+ [-6.21456902e-01 -6.21456902e-01 -6.21456902e-01]]
+max_memory 64000 (MB)  blocksize 7339449
+Cholesky decomposition for j2c at kpt 0
+Symmetry pattern (k - [0. 0. 0.])*a= 2n pi
+    make_kpt for uniq_kptji_ids [0]
+kpt = [0. 0. 0.]
+adapted_ji_idx = [  0   2   5   9  14  20  27  35  44  54  65  77  90 104 119 135 152 170
+ 189 209 230 252 275 299 324 350 377]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 351
+Symmetry pattern (k + [0. 0. 0.])*a= 2n pi
+    make_kpt for [0]
+Cholesky decomposition for j2c at kpt 1
+Symmetry pattern (k - [-0.31072845 -0.31072845  0.31072845])*a= 2n pi
+    make_kpt for uniq_kptji_ids [1]
+kpt = [-0.31072845 -0.31072845  0.31072845]
+adapted_ji_idx = [  1   4  13  19  34  43  64  76 103 118 151 169 208 229 274 298 349 376]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [-0.31072845 -0.31072845  0.31072845])*a= 2n pi
+    make_kpt for [2]
+kpt = [-0.6214569 -0.6214569  0.6214569]
+adapted_ji_idx = [  3  18  42  75 117 168 228 297 375]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 3
+Symmetry pattern (k - [-0.31072845  0.31072845 -0.31072845])*a= 2n pi
+    make_kpt for uniq_kptji_ids [3]
+kpt = [-0.31072845  0.31072845 -0.31072845]
+adapted_ji_idx = [  6  11  17  24  32  41  87 101 116 132 149 167 249 272 296 321 347 374]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [-0.31072845  0.31072845 -0.31072845])*a= 2n pi
+    make_kpt for [8]
+kpt = [-0.6214569  0.6214569 -0.6214569]
+adapted_ji_idx = [ 21  29  38 129 146 164 318 344 371]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 4
+Symmetry pattern (k - [ 0.         0.6214569 -0.6214569])*a= 2n pi
+    make_kpt for uniq_kptji_ids [4 7]
+kpt = [ 0.         0.6214569 -0.6214569]
+adapted_ji_idx = [  7  12  25  33  88 102 133 150 250 273 322 348]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-0.93218535 -0.31072845  0.31072845]
+adapted_ji_idx = [ 15  39 114 165 294 372]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 0.         0.6214569 -0.6214569])*a= 2n pi
+    make_kpt for [10 11]
+kpt = [ 0.         1.2429138 -1.2429138]
+adapted_ji_idx = [ 23 131 320]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-0.93218535  0.31072845 -0.31072845]
+adapted_ji_idx = [ 28  37 145 163 343 370]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 5
+Symmetry pattern (k - [ 0.31072845  0.93218535 -0.93218535])*a= 2n pi
+    make_kpt for uniq_kptji_ids [5 6]
+kpt = [ 0.31072845  0.93218535 -0.93218535]
+adapted_ji_idx = [  8  26  89 134 251 323]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-6.21456902e-01 -1.97585401e-17  1.97585401e-17]
+adapted_ji_idx = [ 10  16  31  40 100 115 148 166 271 295 346 373]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 0.31072845  0.93218535 -0.93218535])*a= 2n pi
+    make_kpt for [ 9 12]
+kpt = [-0.31072845  0.93218535 -0.93218535]
+adapted_ji_idx = [ 22  30 130 147 319 345]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-1.24291380e+00 -3.95170803e-17  3.95170803e-17]
+adapted_ji_idx = [ 36 162 369]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 13
+Symmetry pattern (k - [ 0.31072845 -0.31072845 -0.31072845])*a= 2n pi
+    make_kpt for uniq_kptji_ids [13]
+kpt = [ 0.31072845 -0.31072845 -0.31072845]
+adapted_ji_idx = [ 45  56  68  81  95 110 126 143 161 180 200 221 243 266 290 315 341 368]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 0.31072845 -0.31072845 -0.31072845])*a= 2n pi
+    make_kpt for [38]
+kpt = [ 0.6214569 -0.6214569 -0.6214569]
+adapted_ji_idx = [171 191 212 234 257 281 306 332 359]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 14
+Symmetry pattern (k - [ 0.6214569  0.        -0.6214569])*a= 2n pi
+    make_kpt for uniq_kptji_ids [14 25]
+kpt = [ 0.6214569  0.        -0.6214569]
+adapted_ji_idx = [ 46  57  82  96 127 144 181 201 244 267 316 342]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-0.31072845 -0.93218535  0.31072845]
+adapted_ji_idx = [ 66 108 159 219 288 366]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 0.6214569  0.        -0.6214569])*a= 2n pi
+    make_kpt for [40 47]
+kpt = [ 1.2429138  0.        -1.2429138]
+adapted_ji_idx = [173 236 308]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.31072845 -0.93218535 -0.31072845]
+adapted_ji_idx = [190 211 256 280 331 358]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 15
+Symmetry pattern (k - [ 0.93218535  0.31072845 -0.93218535])*a= 2n pi
+    make_kpt for uniq_kptji_ids [15 22]
+kpt = [ 0.93218535  0.31072845 -0.93218535]
+adapted_ji_idx = [ 47  83 128 182 245 317]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-1.97585401e-17 -6.21456902e-01  1.97585401e-17]
+adapted_ji_idx = [ 55  67  94 109 142 160 199 220 265 289 340 367]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 0.93218535  0.31072845 -0.93218535])*a= 2n pi
+    make_kpt for [39 50]
+kpt = [ 0.93218535 -0.31072845 -0.93218535]
+adapted_ji_idx = [172 192 235 258 307 333]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-3.95170803e-17 -1.24291380e+00  3.95170803e-17]
+adapted_ji_idx = [210 279 357]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 16
+Symmetry pattern (k - [ 0.6214569 -0.6214569  0.       ])*a= 2n pi
+    make_kpt for uniq_kptji_ids [16 33]
+kpt = [ 0.6214569 -0.6214569  0.       ]
+adapted_ji_idx = [ 48  59  71  84  98 113 183 203 224 246 269 293]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-0.31072845  0.31072845 -0.93218535]
+adapted_ji_idx = [120 137 155 309 335 362]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 0.6214569 -0.6214569  0.       ])*a= 2n pi
+    make_kpt for [44 53]
+kpt = [ 1.2429138 -1.2429138  0.       ]
+adapted_ji_idx = [177 197 218]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.31072845 -0.31072845 -0.93218535]
+adapted_ji_idx = [231 254 278 303 329 356]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 17
+Symmetry pattern (k - [ 0.93218535 -0.31072845 -0.31072845])*a= 2n pi
+    make_kpt for uniq_kptji_ids [17 26 34 37]
+kpt = [ 0.93218535 -0.31072845 -0.31072845]
+adapted_ji_idx = [ 49  60  85  99 184 204 247 270]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-5.55111512e-17 -1.24291380e+00  6.21456902e-01]
+adapted_ji_idx = [ 69 111 222 291]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-5.55111512e-17  6.21456902e-01 -1.24291380e+00]
+adapted_ji_idx = [121 138 310 336]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-0.93218535 -0.31072845 -0.31072845]
+adapted_ji_idx = [153 360]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 0.93218535 -0.31072845 -0.31072845])*a= 2n pi
+    make_kpt for [46 49 55 56]
+kpt = [ 1.8643707 -0.6214569 -0.6214569]
+adapted_ji_idx = [179]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.93218535 -1.55364225  0.31072845]
+adapted_ji_idx = [196 217]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.93218535  0.31072845 -1.55364225]
+adapted_ji_idx = [233 305]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-1.97585401e-17 -6.21456902e-01 -6.21456902e-01]
+adapted_ji_idx = [253 277 328 355]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 18
+Symmetry pattern (k - [ 1.24291380e+00  5.55111512e-17 -6.21456902e-01])*a= 2n pi
+    make_kpt for uniq_kptji_ids [18 23 35 36]
+kpt = [ 1.24291380e+00  5.55111512e-17 -6.21456902e-01]
+adapted_ji_idx = [ 50  86 185 248]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.31072845 -0.93218535  0.31072845]
+adapted_ji_idx = [ 58  70  97 112 202 223 268 292]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.31072845  0.93218535 -1.55364225]
+adapted_ji_idx = [122 311]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-6.21456902e-01  3.57526111e-17 -6.21456902e-01]
+adapted_ji_idx = [136 154 334 361]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 1.24291380e+00  5.55111512e-17 -6.21456902e-01])*a= 2n pi
+    make_kpt for [45 52 54 57]
+kpt = [ 1.55364225 -0.93218535 -0.31072845]
+adapted_ji_idx = [178 198]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.6214569 -1.8643707  0.6214569]
+adapted_ji_idx = [216]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.6214569  0.        -1.2429138]
+adapted_ji_idx = [232 255 304 330]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-0.31072845 -0.93218535 -0.31072845]
+adapted_ji_idx = [276 354]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 19
+Symmetry pattern (k - [ 0.93218535 -0.93218535  0.31072845])*a= 2n pi
+    make_kpt for uniq_kptji_ids [19 28]
+kpt = [ 0.93218535 -0.93218535  0.31072845]
+adapted_ji_idx = [ 51  62  74 186 206 227]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-1.97585401e-17  1.97585401e-17 -6.21456902e-01]
+adapted_ji_idx = [ 78  92 107 123 140 158 240 263 287 312 338 365]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 0.93218535 -0.93218535  0.31072845])*a= 2n pi
+    make_kpt for [41 58]
+kpt = [ 0.93218535 -0.93218535 -0.31072845]
+adapted_ji_idx = [174 194 215 237 260 284]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-3.95170803e-17  3.95170803e-17 -1.24291380e+00]
+adapted_ji_idx = [300 326 353]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 20
+Symmetry pattern (k - [ 1.2429138 -0.6214569  0.       ])*a= 2n pi
+    make_kpt for uniq_kptji_ids [20 27 29 32]
+kpt = [ 1.2429138 -0.6214569  0.       ]
+adapted_ji_idx = [ 52  63 187 207]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.31072845 -1.55364225  0.93218535]
+adapted_ji_idx = [ 72 225]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.31072845  0.31072845 -0.93218535]
+adapted_ji_idx = [ 79  93 124 141 241 264 313 339]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-6.21456902e-01 -6.21456902e-01  3.95170803e-17]
+adapted_ji_idx = [105 156 285 363]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 1.2429138 -0.6214569  0.       ])*a= 2n pi
+    make_kpt for [43 48 60 61]
+kpt = [ 1.55364225 -0.31072845 -0.93218535]
+adapted_ji_idx = [176 239]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.6214569 -1.2429138  0.       ]
+adapted_ji_idx = [193 214 259 283]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.6214569  0.6214569 -1.8643707]
+adapted_ji_idx = [302]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-0.31072845 -0.31072845 -0.93218535]
+adapted_ji_idx = [325 352]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Cholesky decomposition for j2c at kpt 21
+Symmetry pattern (k - [ 1.55364225 -0.31072845 -0.31072845])*a= 2n pi
+    make_kpt for uniq_kptji_ids [21 24 30 31]
+kpt = [ 1.55364225 -0.31072845 -0.31072845]
+adapted_ji_idx = [ 53 188]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.6214569 -1.2429138  0.6214569]
+adapted_ji_idx = [ 61  73 205 226]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.6214569  0.6214569 -1.2429138]
+adapted_ji_idx = [ 80 125 242 314]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-0.31072845 -0.31072845 -0.31072845]
+adapted_ji_idx = [ 91 106 139 157 262 286 337 364]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+Symmetry pattern (k + [ 1.55364225 -0.31072845 -0.31072845])*a= 2n pi
+    make_kpt for [42 51 59 62]
+kpt = [ 1.2429138 -0.6214569 -0.6214569]
+adapted_ji_idx = [175 195 238 261]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.31072845 -1.55364225  0.31072845]
+adapted_ji_idx = [213 282]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [ 0.31072845  0.31072845 -1.55364225]
+adapted_ji_idx = [301 327]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+kpt = [-0.6214569 -0.6214569 -0.6214569]
+adapted_ji_idx = [351]
+memory = 0
+int3c2e [1/1], AO [0:10], ncol = 676
+    CPU time for j3c   1556.05 sec, wall time    196.79 sec
+    CPU time for transforming DF-MP2 integrals      1.73 sec, wall time      0.89 sec
+    CPU time for KMP2   1576.19 sec, wall time    210.72 sec
+KMP2 energy = -0.427684369140592
