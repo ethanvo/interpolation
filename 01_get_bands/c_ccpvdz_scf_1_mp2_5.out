@@ -2653,3 +2653,4 @@ adapted_ji_idx = [4950 7775]
 memory = 0
 int3c2e [1/1], AO [0:10], ncol = 676
     CPU time for j3c   5453.84 sec, wall time    778.36 sec
+MP2 Correlation Energy:  -0.4555422176157508

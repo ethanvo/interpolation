@@ -1,15 +1,16 @@
-#INFO: **** input file is /Users/ethanvo/projects/interpolation/01_get_bands/native_dft_mp2.py ****
+#INFO: **** input file is /Users/ethanvo/projects/interpolation/01_get_bands/df_dft_mp2.py ****
 #!/usr/bin/env python
 import numpy as np
-from pyscf.pbc import gto, dft, df
+from pyscf.pbc import gto, dft
 from pyscf.pbc.tools import pyscf_ase, lattice, get_coulG
 from pyscf.gto.basis import parse_nwchem
 from pyscf import lib
-from pyscf.pbc.lib.kpts_helper import get_kconserv, KptsHelper
-from pyscf.pbc.mp.kmp2 import KRMP2
+from pyscf.pbc.lib.kpts_helper import get_kconserv, loop_kkk
+from pyscf.pbc.df import df
+from pyscf.ao2mo import _ao2mo
 import h5py
-from fileutils import load, dump 
 import sys
+from fileutils import load, dump
 
 ##############################
 # Create a "Cell"
@@ -40,50 +41,79 @@ ekrhf = mymf.kernel()
 
 mp2_mesh = int(sys.argv[2])
 kmesh = [mp2_mesh, mp2_mesh, mp2_mesh]
-kpts_interp = cell.make_kpts(kmesh, scaled_center=scaled_center)
-mo_energy, mo_coeff = mymf.get_bands(kpts_interp)
+kpts = cell.make_kpts(kmesh, scaled_center=scaled_center)
+mo_energy, mo_coeff = mymf.get_bands(kpts)
 mo_energy = np.asarray(mo_energy)
 mo_coeff = np.asarray(mo_coeff)
-mo_occ_dtype = mymf.mo_occ[0].dtype
-mo_occ = np.zeros_like(mo_energy, dtype=mo_occ_dtype)
+
+mydf = df.GDF(cell, kpts=kpts)
+mydf.build()
+nao = cell.nao_nr()
 nocc = cell.nelectron // 2
-mo_occ[:, :nocc] = 2.0
+nmo = mo_energy.shape[1]
+nvir = nmo - nocc
+nkpts = len(kpts)
+kconserv = get_kconserv(cell, kpts)
 
-mydf = df.GDF(cell, kpts=kpts_interp)
+mo_e_o = [mo_energy[k][:nocc] for k in range(nkpts)]
+mo_e_v = [mo_energy[k][nocc:] for k in range(nkpts)]
+emp2 = 0.0
 
-##############################
-#  MP2
-##############################
-mymp = KRMP2(mymf, frozen=None, mo_coeff=mo_coeff, mo_occ=mo_occ)
-mymp.with_df_ints = True
-mymp._scf.with_df = mydf
-mymp.kpts = kpts_interp
-mymp.mo_energy = mo_energy
-mymp.nkpts = len(kpts_interp)
-mymp.khelper = KptsHelper(cell, kpts_interp)
-ekmp2, t2 = mymp.kernel()
-total_energy = ekrhf + ekmp2
+Lov = np.empty((nkpts, nkpts), dtype=object)
+bra_start = 0
+bra_end = nocc
+ket_start = nmo + nocc
+ket_end = ket_start + nvir
+with h5py.File(mydf._cderi, 'r') as f:
+    kptij_lst = f['j3c-kptij'][:]
+    tao = []
+    ao_loc = None
+    for ki, kpti in enumerate(kpts):
+        for kj, kptj in enumerate(kpts):
+            kpti_kptj = np.array((kpti, kptj))
+            Lpq = np.asarray(df._getitem(f, 'j3c', kpti_kptj, kptij_lst))
+            mo = np.hstack((mo_coeff[ki], mo_coeff[kj]))
+            mo = np.asarray(mo, dtype=np.complex128, order='F')
+            if Lpq[0].size != nao**2:
+                Lpq = lib.unpack_tril(Lpq).astype(np.complex128)
+            out = _ao2mo.r_e2(Lpq, mo, (bra_start, bra_end, ket_start, ket_end), tao, ao_loc)
+            Lov[ki, kj] = out.reshape(-1, nocc, nvir)
+
+for ki, kj, ka in loop_kkk(nkpts):
+    kb = kconserv[ki, ka, kj]
+    eia = mo_e_o[ki][:, None] - mo_e_v[ka]
+    ejb = mo_e_o[kj][:, None] - mo_e_v[kb]
+    eiajb = lib.direct_sum('ia,jb->iajb', eia, ejb)
+    iajb = lib.einsum('Lia,Ljb->iajb', Lov[ki, ka], Lov[kj, kb]) / nkpts
+    t2 = np.conj(iajb / eiajb)
+    ibja = lib.einsum('Lib,Lja->ibja', Lov[ki, kb], Lov[kj, ka]) / nkpts
+    emp2 += 2*lib.einsum('iajb,iajb', t2, iajb).real
+    emp2 -=   lib.einsum('iajb,ibja', t2, ibja).real
+
+emp2 /= nkpts
+print("MP2 Correlation Energy: ", emp2)
+total_energy = ekrhf + emp2
 
 datafile = sys.argv[3]
 datadict = {}
 datadict['ekrhf'] = ekrhf
-datadict['ekmp2'] = ekmp2
+datadict['ekmp2'] = emp2
 datadict['total_energy'] = total_energy
 dump(datadict, f'data/{datafile}')
 #INFO: ******************** input file end ********************
 
 
 System: uname_result(system='Darwin', node='Concord-Dawn.local', release='23.1.0', version='Darwin Kernel Version 23.1.0: Mon Oct  9 21:27:24 PDT 2023; root:xnu-10002.41.9~6/RELEASE_ARM64_T6000', machine='arm64')  Threads 10
-Python 3.11.5 (main, Aug 24 2023, 15:09:45) [Clang 14.0.3 (clang-1403.0.22.14.1)]
-numpy 1.26.0  scipy 1.10.1
-Date: Tue Nov  7 13:57:30 2023
+Python 3.11.6 (main, Oct  2 2023, 13:45:54) [Clang 15.0.0 (clang-1500.0.40.1)]
+numpy 1.26.1  scipy 1.10.1
+Date: Thu Nov  9 14:07:41 2023
 PySCF version 2.0.1
 PySCF path  /Users/ethanvo/builds/pyscf/projected_cvs/pyscf
 GIT ORIG_HEAD 39249f5012c1a95ee10ab9573a362ed9ef07a422
 GIT HEAD (branch projected-cvs) 12799a671021ff0b92a23c4db7c36e2a9239ed2d
 
-[ENV] PYSCF_MAX_MEMORY 64000
 [ENV] PYSCF_TMPDIR /Users/ethanvo/projects/interpolation/01_get_bands/tmp
+[ENV] PYSCF_MAX_MEMORY 64000
 [CONFIG] DEBUG = False
 [CONFIG] MAX_MEMORY = 64000
 [CONFIG] TMPDIR = /Users/ethanvo/projects/interpolation/01_get_bands/tmp
@@ -130,7 +160,7 @@ bas 6, expnt(s) = [0.149679]
 bas 7, expnt(s) = [4.353457 1.266307 0.398715]
 bas 8, expnt(s) = [0.124238]
 bas 9, expnt(s) = [0.556013]
-CPU time:         0.26
+CPU time:         0.25
 lattice vectors  a1 [0.000000000, 3.370137329, 3.370137329]
                  a2 [3.370137329, 0.000000000, 3.370137329]
                  a3 [3.370137329, 3.370137329, 0.000000000]
@@ -158,7 +188,7 @@ SCF conv_tol_grad = None
 SCF max_cycles = 50
 direct_scf = True
 direct_scf_tol = 1e-13
-chkfile to save SCF result = /Users/ethanvo/projects/interpolation/01_get_bands/tmp/tmpec5bf9p9
+chkfile to save SCF result = /Users/ethanvo/projects/interpolation/01_get_bands/tmp/tmptpfh334o
 max_memory 64000 MB (current use 0 MB)
 
 
@@ -294,7 +324,7 @@ Monkhorst pack size [5 5 5] ew_eta 1.2649191379295914 ew_cut 5.558636691591082
 Ewald components = 0, -0.713756793189606, 0.645734905032067
     madelung (= occupied orbital energy shift) = 0.13604377631507836
     Total energy shift due to Ewald probe charge = -1/2 * Nelec*madelung = -0.54417510526
-DF object = <pyscf.pbc.df.fft.FFTDF object at 0x11cda0cd0>
+DF object = <pyscf.pbc.df.fft.FFTDF object at 0x1030b47d0>
 
 
 ******** <class 'pyscf.pbc.df.fft.FFTDF'> ********
@@ -429,12 +459,12 @@ XC functionals = pbe
 small_rho_cutoff = 1e-07
 Uniform grid, mesh = [35 35 35]
 Set gradient conv threshold to 0.000316228
-    CPU time for setting up grids      0.56 sec, wall time      0.10 sec
+    CPU time for setting up grids      0.55 sec, wall time      0.10 sec
 nelec by numeric integration = 8.000000000000002
-    CPU time for vxc     20.63 sec, wall time      5.06 sec
-    CPU time for vj and vk      9.11 sec, wall time      1.58 sec
+    CPU time for vxc     19.89 sec, wall time      5.33 sec
+    CPU time for vj and vk      8.94 sec, wall time      1.63 sec
 Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
-E1 = (4.897378551259293-2.244296145365857e-19j)  Ecoul = 1.5381193517131257  Exc = -3.799700212989382
+E1 = (4.897378551259293-9.849925191715184e-19j)  Ecoul = 1.5381193517131255  Exc = -3.799700212989382
 init E= -10.1513323741055
 cond(S) = [  26137.1170775    96019.47514386  288104.64687992  288104.64688256
    96019.47514398   96019.47514371  593132.22686083  305971.75198153
@@ -468,7 +498,7 @@ cond(S) = [  26137.1170775    96019.47514386  288104.64687992  288104.64688256
   247308.42577308  247308.42577226  305971.75198611   92987.62149106
   593132.22684192  305971.75198065  134179.19822299   92987.62149188
    96019.47514458]
-    CPU time for initialize scf     39.04 sec, wall time      8.79 sec
+    CPU time for initialize scf     37.89 sec, wall time      9.05 sec
 HOMO = 0.572136267743  LUMO = 0.689924995411
      k-point                  mo_energy
    0 ( 0.000  0.000  0.000)   [-0.24766312  0.57213627  0.57213627  0.57213627] [0.75903984 0.75903984 0.75903984 1.04723492 1.52268223 1.52268223
@@ -972,14 +1002,14 @@ HOMO = 0.572136267743  LUMO = 0.689924995411
  2.30985921 3.14117763 3.14117763 3.32125063 3.35876124 3.35876124
  4.20013464 4.20013464 5.08611587 8.96314665]
 nelec by numeric integration = 8.000000000000082
-    CPU time for vxc     20.33 sec, wall time      5.98 sec
-    CPU time for vj and vk      7.94 sec, wall time      1.45 sec
+    CPU time for vxc     19.35 sec, wall time      6.28 sec
+    CPU time for vj and vk      7.76 sec, wall time      1.49 sec
 Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
-E1 = (4.085755999257033+2.2851946029911473e-17j)  Ecoul = 0.8608473598149476  Exc = -3.519789401215342
+E1 = (4.085755999257025+8.12804684668933e-18j)  Ecoul = 0.8608473598149478  Exc = -3.5197894012153417
 cycle= 1 E= -11.3603161062319  delta_E= -1.21  |g|= 2.13  |ddm|=  135
-    CPU time for cycle= 1     28.32 sec, wall time      7.47 sec
+    CPU time for cycle= 1     27.15 sec, wall time      7.82 sec
 diis-norm(errvec)=3.14393
-diis-c [-9.88428477+1.25227008e-17j  1.        +0.00000000e+00j]
+diis-c [-9.88428477+2.27370597e-18j  1.        +0.00000000e+00j]
 HOMO = 0.478347407181  LUMO = 0.639021137303
      k-point                  mo_energy
    0 ( 0.000  0.000  0.000)   [-0.30691712  0.47834741  0.47834741  0.47834741] [0.68846449 0.68846449 0.68846449 0.95874161 1.48347204 1.48347204
@@ -1183,7 +1213,7 @@ HOMO = 0.478347407181  LUMO = 0.639021137303
  2.36478093 2.61726823 2.70069782 2.91430565 3.04680341 3.32591233
  3.41875493 3.67348179 7.55621966 9.10478909]
   50 ( 0.400 -0.000 -0.000)   [-0.15239807  0.06221066  0.3824866   0.3824866 ] [0.79382544 0.79382544 0.79984204 1.09297127 1.30870271 1.44085033
- 1.44085033 1.8585641  1.8585641  2.06511114 2.21612694 2.46305847
+ 1.44085033 1.8585641  1.8585641  2.06511114 2.21612695 2.46305847
  2.46305847 2.69063039 2.87006621 2.87006621 3.3235559  3.3235559
  3.34850102 3.34850102 4.83073934 9.23737915]
   51 ( 0.400 -0.000  0.200)   [-0.16339669  0.15717505  0.30680896  0.31865905] [0.70905173 0.89809719 0.91513567 0.91764176 1.28280611 1.31861624
@@ -1283,7 +1313,7 @@ HOMO = 0.478347407181  LUMO = 0.639021137303
  2.53253801 2.53802713 2.67071973 2.71139191 3.10366855 3.1479199
  3.41632149 3.49762967 8.68511373 9.18979666]
   75 ( 0.600  0.000  0.000)   [-0.15239807  0.06221066  0.3824866   0.3824866 ] [0.79382544 0.79382544 0.79984204 1.09297127 1.30870271 1.44085033
- 1.44085033 1.8585641  1.8585641  2.06511114 2.21612694 2.46305847
+ 1.44085033 1.8585641  1.8585641  2.06511114 2.21612695 2.46305847
  2.46305847 2.69063039 2.87006621 2.87006621 3.3235559  3.3235559
  3.34850102 3.34850102 4.83073934 9.23737915]
   76 ( 0.600  0.000  0.200)   [-0.07644805  0.03434237  0.2463206   0.33886215] [0.75198031 0.88166144 0.92032083 1.04455988 1.18847333 1.40597806
@@ -1483,15 +1513,15 @@ HOMO = 0.478347407181  LUMO = 0.639021137303
  2.2413148  3.07856592 3.07856592 3.25613333 3.30407281 3.30407281
  4.13696746 4.13696746 4.9644409  8.71076486]
 nelec by numeric integration = 8.000000000000096
-    CPU time for vxc     20.29 sec, wall time      5.87 sec
-    CPU time for vj and vk      7.89 sec, wall time      1.44 sec
+    CPU time for vxc     19.24 sec, wall time      6.22 sec
+    CPU time for vj and vk      7.76 sec, wall time      1.48 sec
 Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
-E1 = (3.99241015572017+2.6543979687876364e-17j)  Ecoul = 0.99477210083354  Exc = -3.5689749081494937
+E1 = (3.99241015572016+2.044344511384355e-17j)  Ecoul = 0.994772100833539  Exc = -3.5689749081494937
 cycle= 2 E= -11.3689227156843  delta_E= -0.00861  |g|= 0.512  |ddm|=  142
-    CPU time for cycle= 2     28.23 sec, wall time      7.36 sec
+    CPU time for cycle= 2     27.04 sec, wall time      7.75 sec
 diis-norm(errvec)=0.802781
-diis-c [-0.00342077-2.38540347e-19j  0.20300239+6.08785592e-19j
-  0.79699761-6.08785592e-19j]
+diis-c [-0.00342077-4.00773202e-19j  0.20300239-4.40827552e-19j
+  0.79699761+4.40827552e-19j]
 HOMO = 0.494546967538  LUMO = 0.646855887229
      k-point                  mo_energy
    0 ( 0.000  0.000  0.000)   [-0.29716008  0.49454697  0.49454697  0.49454697] [0.7005768  0.7005768  0.7005768  0.97480157 1.48888111 1.48888111
@@ -1994,16 +2024,16 @@ HOMO = 0.494546967538  LUMO = 0.646855887229
  1.43333119 1.88082279 2.07931614 2.07931614 2.17018162 2.17018162
  2.25225653 3.08846799 3.08846799 3.26606747 3.3127898  3.3127898
  4.14684503 4.14684503 4.97710452 8.73911777]
-nelec by numeric integration = 8.000000000000094
-    CPU time for vxc     20.23 sec, wall time      5.88 sec
-    CPU time for vj and vk      7.90 sec, wall time      1.44 sec
+nelec by numeric integration = 8.000000000000092
+    CPU time for vxc     19.12 sec, wall time      5.92 sec
+    CPU time for vj and vk      7.77 sec, wall time      1.47 sec
 Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
-E1 = (4.00881742628208-3.527885449050583e-18j)  Ecoul = 0.9677897274349422  Exc = -3.5589477066502493
+E1 = (4.00881742628208+1.2218958483911635e-19j)  Ecoul = 0.967789727434943  Exc = -3.558947706650249
 cycle= 3 E= -11.3694706170217  delta_E= -0.000548  |g|= 0.00646  |ddm|= 21.9
-    CPU time for cycle= 3     28.18 sec, wall time      7.37 sec
+    CPU time for cycle= 3     26.94 sec, wall time      7.44 sec
 diis-norm(errvec)=0.012115
-diis-c [-1.77672265e-06-1.16721965e-21j -5.83287674e-03+2.07421834e-18j
- -3.82692550e-02+8.40565935e-18j  1.04410213e+00-1.04798777e-17j]
+diis-c [-1.77672265e-06-1.25260096e-21j -5.83287674e-03+3.98269615e-18j
+ -3.82692550e-02+1.58101875e-17j  1.04410213e+00-1.97928836e-17j]
 HOMO = 0.494621832518  LUMO = 0.646799421272
      k-point                  mo_energy
    0 ( 0.000  0.000  0.000)   [-0.29715584  0.49462183  0.49462183  0.49462183] [0.7006176  0.7006176  0.7006176  0.97486801 1.48887688 1.48887688
@@ -2507,16 +2537,16 @@ HOMO = 0.494621832518  LUMO = 0.646799421272
  2.25225452 3.08848814 3.08848814 3.26603811 3.31278653 3.31278653
  4.14681064 4.14681064 4.97690006 8.73911292]
 nelec by numeric integration = 8.000000000000094
-    CPU time for vxc     20.50 sec, wall time      5.89 sec
-    CPU time for vj and vk      8.06 sec, wall time      1.44 sec
+    CPU time for vxc     19.18 sec, wall time      6.03 sec
+    CPU time for vj and vk      7.70 sec, wall time      1.52 sec
 Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
-E1 = (4.009040745267515-2.244753861957438e-17j)  Ecoul = 0.9674294628408594  Exc = -3.558810861492735
+E1 = (4.009040745267512-2.341985112785938e-18j)  Ecoul = 0.9674294628408605  Exc = -3.5588108614927356
 cycle= 4 E= -11.3694707174729  delta_E= -1e-07  |g|= 0.000184  |ddm|= 0.399
-    CPU time for cycle= 4     28.61 sec, wall time      7.38 sec
+    CPU time for cycle= 4     26.92 sec, wall time      7.60 sec
 diis-norm(errvec)=0.000295689
-diis-c [-7.21935364e-08-4.83509370e-24j -3.74485140e-04+4.94063624e-19j
- -2.41991395e-03+2.74674158e-18j  5.68674520e-02-5.47681007e-17j
-  9.45926947e-01+5.15272955e-17j]
+diis-c [-7.21935364e-08-4.79025517e-24j -3.74485140e-04+4.34031803e-19j
+ -2.41991395e-03+2.19633114e-18j  5.68674520e-02-3.42166892e-17j
+  9.45926947e-01+3.15863262e-17j]
 HOMO = 0.494625528271  LUMO = 0.646801724803
      k-point                  mo_energy
    0 ( 0.000  0.000  0.000)   [-0.29715322  0.49462553  0.49462553  0.49462553] [0.7006213  0.7006213  0.7006213  0.97487171 1.48887931 1.48887931
@@ -3020,12 +3050,12 @@ HOMO = 0.494625528271  LUMO = 0.646801724803
  2.25225768 3.08849165 3.08849165 3.26604132 3.31278968 3.31278968
  4.14681332 4.14681332 4.9769026  8.73912322]
 nelec by numeric integration = 8.000000000000094
-    CPU time for vxc     20.05 sec, wall time      6.14 sec
-    CPU time for vj and vk      7.87 sec, wall time      2.16 sec
+    CPU time for vxc     19.41 sec, wall time      5.96 sec
+    CPU time for vj and vk      7.79 sec, wall time      1.47 sec
 Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
-E1 = (4.00904350988812+4.2288872056928105e-17j)  Ecoul = 0.9674250856755369  Exc = -3.558809248922821
+E1 = (4.009043509888116+4.0544716022050676e-17j)  Ecoul = 0.9674250856755378  Exc = -3.5588092489228202
 cycle= 5 E= -11.3694707174477  delta_E= 2.52e-11  |g|= 0.000215  |ddm|= 0.00906
-    CPU time for cycle= 5     27.97 sec, wall time      8.35 sec
+    CPU time for cycle= 5     27.25 sec, wall time      7.47 sec
 HOMO = 0.494625545096  LUMO = 0.646801779015
      k-point                  mo_energy
    0 ( 0.000  0.000  0.000)   [-0.29715318  0.49462555  0.49462555  0.49462555] [0.70062137 0.70062137 0.70062137 0.97487173 1.48887941 1.48887941
@@ -3528,25 +3558,18 @@ HOMO = 0.494625545096  LUMO = 0.646801779015
  1.43331469 1.88076956 2.07928979 2.07928979 2.17019627 2.17019627
  2.25225774 3.08849175 3.08849175 3.2660414  3.31278978 3.31278978
  4.14681336 4.14681336 4.9769026  8.73912351]
-nelec by numeric integration = 8.000000000000094
-    CPU time for vxc     19.89 sec, wall time      6.27 sec
-    CPU time for vj and vk      8.06 sec, wall time      1.46 sec
+nelec by numeric integration = 8.000000000000092
+    CPU time for vxc     19.40 sec, wall time      6.02 sec
+    CPU time for vj and vk      7.75 sec, wall time      1.47 sec
 Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
-E1 = (4.00904342467944-9.611452259083997e-19j)  Ecoul = 0.9674252224770412  Exc = -3.5588093004021086
+E1 = (4.009043424679444+5.699867661190794e-18j)  Ecoul = 0.9674252224770399  Exc = -3.558809300402109
 Extra cycle  E= -11.3694707173341  delta_E= 1.14e-10  |g|= 0.000323  |ddm|= 0.00172
-    CPU time for scf_cycle    208.34 sec, wall time     54.50 sec
-    CPU time for SCF    208.37 sec, wall time     54.52 sec
+    CPU time for scf_cycle    200.40 sec, wall time     54.68 sec
+    CPU time for SCF    200.43 sec, wall time     54.71 sec
 converged SCF energy = -11.3694707173341
 nelec by numeric integration = 8.000000000000092
-    CPU time for vxc     34.12 sec, wall time      6.95 sec
-    CPU time for vj and vk      9.74 sec, wall time      1.69 sec
-
-******** <class 'pyscf.pbc.mp.kmp2.KMP2'> ********
-nkpts = 125
-nocc = 4
-nmo = 26
-with_df_ints = True
-max_memory 64000 MB (current use 0 MB)
+    CPU time for vxc     32.81 sec, wall time      7.16 sec
+    CPU time for vj and vk      9.62 sec, wall time      2.04 sec
 
 
 ******** <class 'pyscf.pbc.df.df.GDF'> ********
@@ -3554,7 +3577,7 @@ mesh = [7, 7, 7] (343 PWs)
 auxbasis = None
 eta = 0.2
 exp_to_discard = None
-_cderi_to_save = /Users/ethanvo/projects/interpolation/01_get_bands/tmp/tmppdysleui
+_cderi_to_save = /Users/ethanvo/projects/interpolation/01_get_bands/tmp/tmpgsm014k5
 len(kpts) = 125
     kpts = [[ 0.00000000e+00  0.00000000e+00  0.00000000e+00]
  [ 1.86437070e-01  1.86437070e-01 -1.86437070e-01]
@@ -3689,7 +3712,7 @@ make aux basis, num shells = 44, num cGTOs = 168
 auxcell.rcut 12.846608924246357
 make compensating basis, num shells = 10, num cGTOs = 50
 chgcell.rcut 11.482117703874595
-    CPU time for 3c2e   3653.05 sec, wall time    516.53 sec
+    CPU time for 3c2e   3095.34 sec, wall time    412.83 sec
 Num uniq kpts 365
 uniq_kpts [[ 0.          0.          0.        ]
  [-0.18643707 -0.18643707  0.18643707]
@@ -5868,4 +5891,5 @@ kpt = [-0.93218535 -0.55931121 -0.55931121]
 adapted_ji_idx = [4950 7775]
 memory = 0
 int3c2e [1/1], AO [0:10], ncol = 676
-    CPU time for j3c   5877.54 sec, wall time    864.13 sec
+    CPU time for j3c   5440.21 sec, wall time    767.77 sec
+MP2 Correlation Energy:  -0.4473645212476431
