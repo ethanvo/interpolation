@@ -1,6 +1,6 @@
-#!/bin/zsh
-python3 df_dft_mp2.py 1 5 c_ccpvdz_scf_1_mp2_5.json 1> c_ccpvdz_scf_1_mp2_5.out 2> c_ccpvdz_scf_1_mp2_5.err
-python3 df_dft_mp2.py 2 5 c_ccpvdz_scf_2_mp2_5.json 1> c_ccpvdz_scf_2_mp2_5.out 2> c_ccpvdz_scf_2_mp2_5.err
-python3 df_dft_mp2.py 3 5 c_ccpvdz_scf_3_mp2_5.json 1> c_ccpvdz_scf_3_mp2_5.out 2> c_ccpvdz_scf_3_mp2_5.err
-python3 df_dft_mp2.py 4 5 c_ccpvdz_scf_4_mp2_5.json 1> c_ccpvdz_scf_4_mp2_5.out 2> c_ccpvdz_scf_4_mp2_5.err
-python3 df_dft_mp2.py 5 5 c_ccpvdz_scf_5_mp2_5.json 1> c_ccpvdz_scf_5_mp2_5.out 2> c_ccpvdz_scf_5_mp2_5.err
+#!/bin/bash
+sbatch -J standard_hf_c_ccpvdz_1 --time=5-00:00:00 --mem=187G df_hf_mp2.sh 1 standard_hf_c_ccpvdz_1.json
+sbatch -J standard_hf_c_ccpvdz_2 --time=5-00:00:00 --mem=187G df_hf_mp2.sh 2 standard_hf_c_ccpvdz_2.json
+sbatch -J standard_hf_c_ccpvdz_3 --time=5-00:00:00 --mem=187G df_hf_mp2.sh 3 standard_hf_c_ccpvdz_3.json
+sbatch -J standard_hf_c_ccpvdz_4 --time=5-00:00:00 --mem=187G df_hf_mp2.sh 4 standard_hf_c_ccpvdz_4.json
+sbatch -J standard_hf_c_ccpvdz_5 --time=5-00:00:00 --mem=187G df_hf_mp2.sh 5 standard_hf_c_ccpvdz_5.json
