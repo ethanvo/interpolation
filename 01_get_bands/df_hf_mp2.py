@@ -22,7 +22,7 @@ ase_atom = lattice.get_ase_atom(formula)
 cell.atom = pyscf_ase.ase_atoms_to_pyscf(ase_atom)
 cell.a = ase_atom.cell[:]
 cell.unit = 'B'
-cell.basis = {'C': parse_nwchem.load("/Users/ethanvo/builds/ccgto/basis/gth-hf-rev/cc-pvdz-lc.dat", 'C')}
+cell.basis = {'C': parse_nwchem.load("/burg/berkelbach/users/eav2136/builds/ccgto/basis/gth-hf-rev/cc-pvdz-lc.dat", 'C')}
 cell.pseudo = "gth-hf-rev"
 cell.verbose = 7
 cell.build()
