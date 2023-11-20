@@ -18,4 +18,4 @@ export PYSCF_MAX_MEMORY=$(bc <<< "$SLURM_MEM_PER_NODE / 1.024 / 1")
 export PYSCF_TMPDIR=$(readlink -f tmp)
 export OMP_NUM_THREADS=32
 
-python c_df_dft_mp2.py $1
+python c_df_dft_mp2.py $1 $2 $3
