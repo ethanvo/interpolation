@@ -1,0 +1,248 @@
+#INFO: **** input file is /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/c_df_dft_mp2.py ****
+#!/usr/bin/env python
+import numpy as np
+from pyscf.pbc import gto, dft
+from pyscf.pbc.tools import pyscf_ase, lattice, get_coulG
+from pyscf.gto.basis import parse_nwchem
+from pyscf import lib
+from pyscf.pbc.lib.kpts_helper import get_kconserv, loop_kkk
+from pyscf.pbc.df import df
+from pyscf.ao2mo import _ao2mo
+import h5py
+import sys
+from fileutils import load, dump
+
+##############################
+# Create a "Cell"
+##############################
+
+cell = gto.Cell()
+# Candidate formula of solid: c, si, sic, bn, bp, aln, alp, mgo, mgs, lih, lif, licl
+formula = "c"
+ase_atom = lattice.get_ase_atom(formula)
+cell.atom = pyscf_ase.ase_atoms_to_pyscf(ase_atom)
+cell.a = ase_atom.cell[:]
+cell.unit = 'B'
+cell.basis = {'C': parse_nwchem.load("/burg/berkelbach/users/eav2136/builds/ccgto/basis/gth-hf-rev/cc-pvdz-lc.dat", 'C')}
+cell.pseudo = "gth-hf-rev"
+cell.verbose = 7
+cell.build()
+
+##############################
+#  K-point SCF 
+##############################
+scf_mesh = int(sys.argv[1])
+kmesh = [scf_mesh, scf_mesh, scf_mesh]
+scaled_center=[0.0, 0.0, 0.0]
+kpts = cell.make_kpts(kmesh, scaled_center=scaled_center)
+mymf = dft.KRKS(cell, kpts=kpts)
+mymf.xc = 'pbe'
+mydf = df.GDF(cell, kpts=kpts)
+mymf.with_df = mydf
+ekrhf = mymf.kernel()
+
+mp2_mesh = int(sys.argv[2])
+kmesh = [mp2_mesh, mp2_mesh, mp2_mesh]
+kpts = cell.make_kpts(kmesh, scaled_center=scaled_center)
+mo_energy, mo_coeff = mymf.get_bands(kpts)
+mo_energy = np.asarray(mo_energy)
+mo_coeff = np.asarray(mo_coeff)
+
+mydf = df.GDF(cell, kpts=kpts)
+mydf.build()
+nao = cell.nao_nr()
+nocc = cell.nelectron // 2
+nmo = mo_energy.shape[1]
+nvir = nmo - nocc
+nkpts = len(kpts)
+kconserv = get_kconserv(cell, kpts)
+
+mo_e_o = [mo_energy[k][:nocc] for k in range(nkpts)]
+mo_e_v = [mo_energy[k][nocc:] for k in range(nkpts)]
+emp2 = 0.0
+
+Lov = np.empty((nkpts, nkpts), dtype=object)
+bra_start = 0
+bra_end = nocc
+ket_start = nmo + nocc
+ket_end = ket_start + nvir
+with h5py.File(mydf._cderi, 'r') as f:
+    kptij_lst = f['j3c-kptij'][:]
+    tao = []
+    ao_loc = None
+    for ki, kpti in enumerate(kpts):
+        for kj, kptj in enumerate(kpts):
+            kpti_kptj = np.array((kpti, kptj))
+            Lpq = np.asarray(df._getitem(f, 'j3c', kpti_kptj, kptij_lst))
+            mo = np.hstack((mo_coeff[ki], mo_coeff[kj]))
+            mo = np.asarray(mo, dtype=np.complex128, order='F')
+            if Lpq[0].size != nao**2:
+                Lpq = lib.unpack_tril(Lpq).astype(np.complex128)
+            out = _ao2mo.r_e2(Lpq, mo, (bra_start, bra_end, ket_start, ket_end), tao, ao_loc)
+            Lov[ki, kj] = out.reshape(-1, nocc, nvir)
+
+for ki, kj, ka in loop_kkk(nkpts):
+    kb = kconserv[ki, ka, kj]
+    eia = mo_e_o[ki][:, None] - mo_e_v[ka]
+    ejb = mo_e_o[kj][:, None] - mo_e_v[kb]
+    eiajb = lib.direct_sum('ia,jb->iajb', eia, ejb)
+    iajb = lib.einsum('Lia,Ljb->iajb', Lov[ki, ka], Lov[kj, kb]) / nkpts
+    t2 = np.conj(iajb / eiajb)
+    ibja = lib.einsum('Lib,Lja->ibja', Lov[ki, kb], Lov[kj, ka]) / nkpts
+    emp2 += 2*lib.einsum('iajb,iajb', t2, iajb).real
+    emp2 -=   lib.einsum('iajb,ibja', t2, ibja).real
+
+emp2 /= nkpts
+print("MP2 Correlation Energy: ", emp2)
+total_energy = ekrhf + emp2
+
+datafile = sys.argv[3]
+datadict = {}
+datadict['ekrhf'] = ekrhf
+datadict['ekmp2'] = emp2
+datadict['total_energy'] = total_energy
+dump(datadict, f'data/{datafile}')
+#INFO: ******************** input file end ********************
+
+
+System: uname_result(system='Linux', node='g120', release='4.18.0-193.el8.x86_64', version='#1 SMP Fri Mar 27 14:35:58 UTC 2020', machine='x86_64')  Threads 32
+Python 3.10.12 (main, Jul 29 2023, 11:27:27) [GCC 13.2.0]
+numpy 1.25.1  scipy 1.10.1
+Date: Tue Nov 21 11:29:40 2023
+PySCF version 2.0.1
+PySCF path  /burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf
+GIT HEAD (branch projected-cvs) 0bfbc692adf3ea63b8a509210433219cd1c472a2
+
+[ENV] PYSCF_TMPDIR /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/tmp
+[ENV] PYSCF_MAX_MEMORY 187000
+[CONFIG] DEBUG = False
+[CONFIG] MAX_MEMORY = 187000
+[CONFIG] TMPDIR = /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/tmp
+[CONFIG] UNIT = angstrom
+[CONFIG] VERBOSE = 3
+[CONFIG] conf_file = None
+[INPUT] verbose = 7
+[INPUT] max_memory = 187000 
+[INPUT] num. atoms = 2
+[INPUT] num. electrons = 8
+[INPUT] charge = 0
+[INPUT] spin (= nelec alpha-beta = 2S) = 0
+[INPUT] symmetry False subgroup None
+[INPUT] Mole.unit = B
+[INPUT]  1 C      0.000000000000   0.000000000000   0.000000000000 AA    0.000000000000   0.000000000000   0.000000000000 Bohr
+[INPUT]  2 C      0.891699936031   0.891699936031   0.891699936031 AA    1.685068664391   1.685068664391   1.685068664391 Bohr
+[INPUT] ---------------- BASIS SET ---------------- 
+[INPUT] l, kappa, [nprim/nctr], expnt,             c_1 c_2 ...
+[INPUT] C
+[INPUT] 0    0    [3    /1   ]  9.031436          -0.01960629
+                                3.821255          -0.1291762
+                                0.473725          0.5822572
+[INPUT] 0    0    [1    /1   ]  0.149679             1
+[INPUT] 1    0    [3    /1   ]  4.353457          0.08730943
+                                1.266307          0.2797034
+                                0.398715          0.5024424
+[INPUT] 1    0    [1    /1   ]  0.124238             1
+[INPUT] 2    0    [1    /1   ]  0.556013             1
+
+Ewald components = 8.67997097708575e-26, -47.3756282134421, 34.5884981493536
+nuclear repulsion = -12.7871300640885
+number of shells = 10
+number of NR pGTOs = 42
+number of NR cGTOs = 26
+basis = {'C': [[0, [9.031436, -0.01960629], [3.821255, -0.1291762], [0.473725, 0.5822572]], [0, [0.149679, 1.0]], [1, [4.353457, 0.08730943], [1.266307, 0.2797034], [0.398715, 0.5024424]], [1, [0.124238, 1.0]], [2, [0.556013, 1.0]]]}
+ecp = {}
+bas 0, expnt(s) = [9.031436 3.821255 0.473725]
+bas 1, expnt(s) = [0.149679]
+bas 2, expnt(s) = [4.353457 1.266307 0.398715]
+bas 3, expnt(s) = [0.124238]
+bas 4, expnt(s) = [0.556013]
+bas 5, expnt(s) = [9.031436 3.821255 0.473725]
+bas 6, expnt(s) = [0.149679]
+bas 7, expnt(s) = [4.353457 1.266307 0.398715]
+bas 8, expnt(s) = [0.124238]
+bas 9, expnt(s) = [0.556013]
+CPU time:         0.99
+lattice vectors  a1 [0.000000000, 3.370137329, 3.370137329]
+                 a2 [3.370137329, 0.000000000, 3.370137329]
+                 a3 [3.370137329, 3.370137329, 0.000000000]
+dimension = 3
+low_dim_ft_type = None
+Cell volume = 76.5549
+rcut = 21.970857926874924 (nimgs = [6 6 6])
+lattice sum = 1313 cells
+precision = 1e-08
+pseudo = gth-hf-rev
+ke_cutoff = 382.86670519327265
+    = [35 35 35] mesh (42875 PWs)
+
+
+******** <class 'pyscf.pbc.dft.krks.KRKS'> ********
+method = KRKS-KohnShamDFT
+initial guess = minao
+damping factor = 0
+level_shift factor = 0
+DIIS = <class 'pyscf.scf.diis.CDIIS'>
+diis_start_cycle = 1
+diis_space = 8
+SCF conv_tol = 1e-07
+SCF conv_tol_grad = None
+SCF max_cycles = 50
+direct_scf = True
+direct_scf_tol = 1e-13
+chkfile to save SCF result = /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/tmp/tmp8l_g4p0s
+max_memory 187000 MB (current use 111 MB)
+
+
+******** PBC SCF flags ********
+N kpts = 1000
+kpts = [[ 0.          0.          0.        ]
+ [ 0.09321854  0.09321854 -0.09321854]
+ [ 0.18643707  0.18643707 -0.18643707]
+ ...
+ [ 0.65252975  0.65252975  1.02540389]
+ [ 0.74574828  0.74574828  0.93218535]
+ [ 0.83896682  0.83896682  0.83896682]]
+Exchange divergence treatment (exxdiv) = ewald
+Monkhorst pack size [10 10 10] ew_eta 0.7587826246451072 ew_cut 9.259270258664882
+Ewald components = 0, -0.428132890920434, 0.394121946775
+    madelung (= occupied orbital energy shift) = 0.06802188829086653
+    Total energy shift due to Ewald probe charge = -1/2 * Nelec*madelung = -0.272087553163
+DF object = <pyscf.pbc.df.df.GDF object at 0x155535e74ca0>
+XC functionals = pbe
+small_rho_cutoff = 1e-07
+Uniform grid, mesh = [35 35 35]
+Set gradient conv threshold to 0.000316228
+    CPU time for vnuc pass1: analytic int   2016.54 sec, wall time     80.06 sec
+    CPU time for contracting Vnuc [0:216]     32.95 sec, wall time      1.69 sec
+    CPU time for contracting Vnuc     32.95 sec, wall time      1.69 sec
+    CPU time for get_pp_loc_part1   2050.52 sec, wall time     81.78 sec
+    CPU time for get_pp_loc_part2   3952.04 sec, wall time    152.59 sec
+    CPU time for get_pp_nl      3.93 sec, wall time      0.13 sec
+    CPU time for get_pp   6006.49 sec, wall time    234.51 sec
+    CPU time for setting up grids      5.43 sec, wall time      0.19 sec
+nelec by numeric integration = 7.999999999999997
+    CPU time for vxc   2362.49 sec, wall time     78.11 sec
+
+
+******** <class 'pyscf.pbc.df.df.GDF'> ********
+mesh = [7, 7, 7] (343 PWs)
+auxbasis = None
+eta = 0.2
+exp_to_discard = None
+_cderi_to_save = /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/tmp/tmpj172h_7h
+len(kpts) = 1000
+    kpts = [[ 0.          0.          0.        ]
+ [ 0.09321854  0.09321854 -0.09321854]
+ [ 0.18643707  0.18643707 -0.18643707]
+ ...
+ [ 0.65252975  0.65252975  1.02540389]
+ [ 0.74574828  0.74574828  0.93218535]
+ [ 0.83896682  0.83896682  0.83896682]]
+Even tempered Gaussians are generated as DF auxbasis for  C
+  ETB auxbasis for C  [[0, [9.579456, 1]], [0, [4.789728, 1]], [0, [2.394864, 1]], [0, [1.197432, 1]], [0, [0.598716, 1]], [0, [0.299358, 1]], [1, [8.727455361661383, 1]], [1, [4.363727680830691, 1]], [1, [2.1818638404153456, 1]], [1, [1.0909319202076728, 1]], [1, [0.5454659601038364, 1]], [1, [0.2727329800519182, 1]], [2, [7.951232, 1]], [2, [3.975616, 1]], [2, [1.987808, 1]], [2, [0.993904, 1]], [2, [0.496952, 1]], [2, [0.248476, 1]], [3, [2.1026146480075707, 1]], [3, [1.0513073240037853, 1]], [3, [0.5256536620018927, 1]], [4, [1.112026, 1]]]
+num shells = 44, num cGTOs = 168
+Drop 0 primitive fitting functions
+make aux basis, num shells = 44, num cGTOs = 168
+auxcell.rcut 12.846608924246357
+make compensating basis, num shells = 10, num cGTOs = 50
+chgcell.rcut 11.482117703874595
