@@ -57,12 +57,14 @@ nmo = mo_energy.shape[1]
 nvir = nmo - nocc
 nkpts = len(kpts)
 kconserv = get_kconserv(cell, kpts)
+naux = mydf.get_naoaux()
 
 mo_e_o = [mo_energy[k][:nocc] for k in range(nkpts)]
 mo_e_v = [mo_energy[k][nocc:] for k in range(nkpts)]
 emp2 = 0.0
 
-Lov = np.empty((nkpts, nkpts), dtype=object)
+feri = lib.H5TmpFile()
+Lov = feri.create_dataset('Lov', (nkpts, nkpts, naux, nocc, nvir), np.complex128)
 bra_start = 0
 bra_end = nocc
 ket_start = nmo + nocc
