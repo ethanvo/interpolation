@@ -17,7 +17,7 @@ from fileutils import load, dump
 
 cell = gto.Cell()
 # Candidate formula of solid: c, si, sic, bn, bp, aln, alp, mgo, mgs, lih, lif, licl
-formula = "lih"
+formula = "lif"
 ase_atom = lattice.get_ase_atom(formula)
 cell.atom = pyscf_ase.ase_atoms_to_pyscf(ase_atom)
 cell.a = ase_atom.cell[:]
