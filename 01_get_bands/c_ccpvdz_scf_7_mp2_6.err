@@ -2,5 +2,47 @@
 The following have been reloaded with a version change:
   1) gcc/10.2.0 => gcc/13.0.1
 
-/cm/local/apps/slurm/var/spool/job10063253/slurm_script: line 21: 2754898 Killed                  python c_df_dft_mp2.py $1 $2 $3
-slurmstepd: error: Detected 1 oom-kill event(s) in step 10063253.batch cgroup. Some of your processes may have been killed by the cgroup out-of-memory handler.
+Traceback (most recent call last):
+  File "/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/c_df_dft_mp2.py", line 46, in <module>
+    mo_energy, mo_coeff = mymf.get_bands(kpts)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/scf/khf.py", line 716, in get_bands
+    fock = fock + self.get_veff(cell, dm_kpts, kpts=kpts, kpts_band=kpts_band)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/dft/krks.py", line 96, in get_veff
+    vj = ks.get_j(cell, dm, hermi, kpts, kpts_band)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/scf/khf.py", line 620, in get_j
+    return self.get_jk(cell, dm_kpts, hermi, kpts, kpts_band,
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/scf/khf.py", line 638, in get_jk
+    vj, vk = self.with_df.get_jk(dm_kpts, hermi, kpts, kpts_band,
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df.py", line 750, in get_jk
+    vj = df_jk.get_j_kpts(self, dm, hermi, kpts, kpts_band)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df_jk.py", line 75, in get_j_kpts
+    mydf.build(kpts_band=kpts_band)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df.py", line 595, in build
+    self._make_j3c(self.cell, self.auxcell, kptij_lst, cderi)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df.py", line 413, in _make_j3c
+    make_kpt(uniq_kptji_id, cholesky_j2c)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df.py", line 363, in make_kpt
+    feri['j3c/%d/%d'%(ji,istep)] = v
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/group.py", line 483, in __setitem__
+    ds = self.create_dataset(None, data=obj)
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/group.py", line 183, in create_dataset
+    dsid = dataset.make_new_dset(group, shape, dtype, data, name, **kwds)
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/dataset.py", line 168, in make_new_dset
+    dset_id.write(h5s.ALL, h5s.ALL, data)
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py/h5d.pyx", line 280, in h5py.h5d.DatasetID.write
+  File "h5py/_proxy.pyx", line 114, in h5py._proxy.dset_rw
+OSError: [Errno 122] Can't synchronously write data (file write failed: time = Fri Dec 15 05:05:41 2023
+, filename = '/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp/tmpa2n3lnaq', file descriptor = 5, errno = 122, error message = 'Disk quota exceeded', buf = 0x24b52268, total write size = 1720680, bytes this sub-write = 1720680, bytes actually written = 18446744073709551615, offset = 0)
+Traceback (most recent call last):
+  File "h5py/_objects.pyx", line 201, in h5py._objects.ObjectID.__dealloc__
+OSError: [Errno 122] Close failed (file write failed: time = Fri Dec 15 05:05:41 2023
+, filename = '/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp/tmpa2n3lnaq', file descriptor = 5, errno = 122, error message = 'Disk quota exceeded', buf = 0x3c5fa60, total write size = 1441792, bytes this sub-write = 1441792, bytes actually written = 18446744073709551615, offset = 0)
+Exception ignored in: 'h5py._objects.ObjectID.__dealloc__'
+Traceback (most recent call last):
+  File "h5py/_objects.pyx", line 201, in h5py._objects.ObjectID.__dealloc__
+OSError: [Errno 122] Close failed (file write failed: time = Fri Dec 15 05:05:41 2023
+, filename = '/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp/tmpa2n3lnaq', file descriptor = 5, errno = 122, error message = 'Disk quota exceeded', buf = 0x3c5fa60, total write size = 1441792, bytes this sub-write = 1441792, bytes actually written = 18446744073709551615, offset = 0)
+/cm/local/apps/slurm/var/spool/job10633622/slurm_script: line 21: 2123752 Killed                  python c_df_dft_mp2.py $1 $2 $3
+slurmstepd: error: Detected 1 oom-kill event(s) in step 10633622.batch cgroup. Some of your processes may have been killed by the cgroup out-of-memory handler.

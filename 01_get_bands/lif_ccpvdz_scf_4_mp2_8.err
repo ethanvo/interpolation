@@ -9,4 +9,4 @@ WARNING!
   linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
   to remove the diffused Gaussians whose exponents are less than 0.1.
 
-slurmstepd: error: Detected 1 oom-kill event(s) in step 10063308.batch cgroup. Some of your processes may have been killed by the cgroup out-of-memory handler.
+slurmstepd: error: *** JOB 10633675 ON g112 CANCELLED AT 2023-12-20T08:06:12 DUE TO TIME LIMIT ***

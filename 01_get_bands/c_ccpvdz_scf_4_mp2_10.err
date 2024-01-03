@@ -2,4 +2,5 @@
 The following have been reloaded with a version change:
   1) gcc/10.2.0 => gcc/13.0.1
 
-slurmstepd: error: Detected 1 oom-kill event(s) in step 10063230.batch cgroup. Some of your processes may have been killed by the cgroup out-of-memory handler.
+/cm/local/apps/slurm/var/spool/job10633607/slurm_script: line 21: 2022873 Killed                  python c_df_dft_mp2.py $1 $2 $3
+slurmstepd: error: Detected 1 oom-kill event(s) in step 10633607.batch cgroup. Some of your processes may have been killed by the cgroup out-of-memory handler.
