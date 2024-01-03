@@ -9,5 +9,37 @@ WARNING!
   linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
   to remove the diffused Gaussians whose exponents are less than 0.1.
 
-/cm/local/apps/slurm/var/spool/job10063290/slurm_script: line 21: 2787878 Killed                  python lif_df_dft_mp2.py $1 $2 $3
-slurmstepd: error: Detected 1 oom-kill event(s) in step 10063290.batch cgroup. Some of your processes may have been killed by the cgroup out-of-memory handler.
+Traceback (most recent call last):
+  File "/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/lif_df_dft_mp2.py", line 53, in <module>
+    mydf.build()
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df.py", line 595, in build
+    self._make_j3c(self.cell, self.auxcell, kptij_lst, cderi)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df.py", line 171, in _make_j3c
+    outcore._aux_e2(cell, fused_cell, fswap, 'int3c2e', aosym='s2',
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/outcore.py", line 258, in _aux_e2
+    feri['%s/%d/%d' % (dataname,k,istep)] = v
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/group.py", line 483, in __setitem__
+    ds = self.create_dataset(None, data=obj)
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/group.py", line 183, in create_dataset
+    dsid = dataset.make_new_dset(group, shape, dtype, data, name, **kwds)
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/dataset.py", line 168, in make_new_dset
+    dset_id.write(h5s.ALL, h5s.ALL, data)
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py/h5d.pyx", line 280, in h5py.h5d.DatasetID.write
+  File "h5py/_proxy.pyx", line 114, in h5py._proxy.dset_rw
+OSError: [Errno 122] Can't synchronously write data (file write failed: time = Fri Dec 15 08:04:29 2023
+, filename = '/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp/tmp4ok2mxjf', file descriptor = 7, errno = 122, error message = 'Disk quota exceeded', buf = 0x15390fb3b098, total write size = 1405176, bytes this sub-write = 1405176, bytes actually written = 18446744073709551615, offset = 0)
+Exception ignored in: <function H5TmpFile.__del__ at 0x1555404ec9d0>
+Traceback (most recent call last):
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/lib/misc.py", line 914, in __del__
+    self.close()
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/files.py", line 586, in close
+    self.id._close_open_objects(h5f.OBJ_LOCAL | h5f.OBJ_FILE)
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py/h5f.pyx", line 360, in h5py.h5f.FileID._close_open_objects
+RuntimeError: Disable slist on flush dest failure failed (file write failed: time = Fri Dec 15 08:04:30 2023
+, filename = '/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp/tmp4ok2mxjf', file descriptor = 7, errno = 122, error message = 'Disk quota exceeded', buf = 0x5e92578, total write size = 360448, bytes this sub-write = 360448, bytes actually written = 18446744073709551615, offset = 0)
+/cm/local/apps/slurm/var/spool/job10633667/slurm_script: line 21: 3766531 Killed                  python lif_df_dft_mp2.py $1 $2 $3
+slurmstepd: error: Detected 1 oom-kill event(s) in step 10633667.batch cgroup. Some of your processes may have been killed by the cgroup out-of-memory handler.

@@ -1,4 +1,4 @@
-#INFO: **** input file is /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/c_df_dft_mp2.py ****
+#INFO: **** input file is /burg/ccce/users/eav2136/projects/interpolation/01_get_bands/c_df_dft_mp2.py ****
 #!/usr/bin/env python
 import numpy as np
 from pyscf.pbc import gto, dft
@@ -56,12 +56,14 @@ nmo = mo_energy.shape[1]
 nvir = nmo - nocc
 nkpts = len(kpts)
 kconserv = get_kconserv(cell, kpts)
+naux = mydf.get_naoaux()
 
 mo_e_o = [mo_energy[k][:nocc] for k in range(nkpts)]
 mo_e_v = [mo_energy[k][nocc:] for k in range(nkpts)]
 emp2 = 0.0
 
-Lov = np.empty((nkpts, nkpts), dtype=object)
+feri = lib.H5TmpFile()
+Lov = feri.create_dataset('Lov', (nkpts, nkpts, naux, nocc, nvir), np.complex128)
 bra_start = 0
 bra_end = nocc
 ket_start = nmo + nocc
@@ -101,28 +103,27 @@ datadict = {}
 datadict['ekrhf'] = ekrhf
 datadict['ekmp2'] = emp2
 datadict['total_energy'] = total_energy
-dump(datadict, f'data/{datafile}')
-#INFO: ******************** input file end ********************
+dump(datadict, f'data/{datafile}')#INFO: ******************** input file end ********************
 
 
-System: uname_result(system='Linux', node='g120', release='4.18.0-193.el8.x86_64', version='#1 SMP Fri Mar 27 14:35:58 UTC 2020', machine='x86_64')  Threads 32
+System: uname_result(system='Linux', node='g113', release='4.18.0-193.el8.x86_64', version='#1 SMP Fri Mar 27 14:35:58 UTC 2020', machine='x86_64')  Threads 32
 Python 3.10.12 (main, Jul 29 2023, 11:27:27) [GCC 13.2.0]
 numpy 1.25.1  scipy 1.10.1
-Date: Tue Nov 21 11:06:53 2023
+Date: Fri Dec 15 05:08:35 2023
 PySCF version 2.0.1
 PySCF path  /burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf
 GIT HEAD (branch projected-cvs) 0bfbc692adf3ea63b8a509210433219cd1c472a2
 
-[ENV] PYSCF_TMPDIR /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/tmp
-[ENV] PYSCF_MAX_MEMORY 187000
+[ENV] PYSCF_TMPDIR /burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp
+[ENV] PYSCF_MAX_MEMORY 700000
 [CONFIG] DEBUG = False
-[CONFIG] MAX_MEMORY = 187000
-[CONFIG] TMPDIR = /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/tmp
+[CONFIG] MAX_MEMORY = 700000
+[CONFIG] TMPDIR = /burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp
 [CONFIG] UNIT = angstrom
 [CONFIG] VERBOSE = 3
 [CONFIG] conf_file = None
 [INPUT] verbose = 7
-[INPUT] max_memory = 187000 
+[INPUT] max_memory = 700000 
 [INPUT] num. atoms = 2
 [INPUT] num. electrons = 8
 [INPUT] charge = 0
@@ -161,7 +162,7 @@ bas 6, expnt(s) = [0.149679]
 bas 7, expnt(s) = [4.353457 1.266307 0.398715]
 bas 8, expnt(s) = [0.124238]
 bas 9, expnt(s) = [0.556013]
-CPU time:         1.01
+CPU time:         1.06
 lattice vectors  a1 [0.000000000, 3.370137329, 3.370137329]
                  a2 [3.370137329, 0.000000000, 3.370137329]
                  a3 [3.370137329, 3.370137329, 0.000000000]
@@ -189,8 +190,8 @@ SCF conv_tol_grad = None
 SCF max_cycles = 50
 direct_scf = True
 direct_scf_tol = 1e-13
-chkfile to save SCF result = /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/tmp/tmpljn0lc63
-max_memory 187000 MB (current use 110 MB)
+chkfile to save SCF result = /burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp/tmp7o26xnja
+max_memory 700000 MB (current use 86 MB)
 
 
 ******** PBC SCF flags ********
@@ -207,21 +208,21 @@ Monkhorst pack size [9 9 9] ew_eta 0.7536157286953792 ew_cut 9.322654447422815
 Ewald components = 0, -0.425231702798565, 0.387441764887372
     madelung (= occupied orbital energy shift) = 0.0755798758223849
     Total energy shift due to Ewald probe charge = -1/2 * Nelec*madelung = -0.30231950329
-DF object = <pyscf.pbc.df.df.GDF object at 0x155535e74ca0>
+DF object = <pyscf.pbc.df.df.GDF object at 0x155535e80df0>
 XC functionals = pbe
 small_rho_cutoff = 1e-07
 Uniform grid, mesh = [35 35 35]
 Set gradient conv threshold to 0.000316228
-    CPU time for vnuc pass1: analytic int   1475.68 sec, wall time     57.84 sec
-    CPU time for contracting Vnuc [0:216]     26.17 sec, wall time      1.23 sec
-    CPU time for contracting Vnuc     26.18 sec, wall time      1.23 sec
-    CPU time for get_pp_loc_part1   1502.57 sec, wall time     59.10 sec
-    CPU time for get_pp_loc_part2   2919.33 sec, wall time    115.79 sec
-    CPU time for get_pp_nl      2.16 sec, wall time      0.09 sec
-    CPU time for get_pp   4424.07 sec, wall time    174.97 sec
-    CPU time for setting up grids      5.21 sec, wall time      0.24 sec
+    CPU time for vnuc pass1: analytic int   1508.82 sec, wall time     57.87 sec
+    CPU time for contracting Vnuc [0:216]     28.28 sec, wall time      1.56 sec
+    CPU time for contracting Vnuc     28.30 sec, wall time      1.56 sec
+    CPU time for get_pp_loc_part1   1538.38 sec, wall time     59.47 sec
+    CPU time for get_pp_loc_part2   2797.31 sec, wall time    110.51 sec
+    CPU time for get_pp_nl      4.06 sec, wall time      0.14 sec
+    CPU time for get_pp   4339.76 sec, wall time    170.13 sec
+    CPU time for setting up grids      5.52 sec, wall time      0.24 sec
 nelec by numeric integration = 8.000000000000002
-    CPU time for vxc   1406.41 sec, wall time     46.38 sec
+    CPU time for vxc   1410.04 sec, wall time     48.29 sec
 
 
 ******** <class 'pyscf.pbc.df.df.GDF'> ********
@@ -229,7 +230,7 @@ mesh = [7, 7, 7] (343 PWs)
 auxbasis = None
 eta = 0.2
 exp_to_discard = None
-_cderi_to_save = /burg/berkelbach/users/eav2136/projects/interpolation/01_get_bands/tmp/tmp6ccc0buz
+_cderi_to_save = /burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp/tmpnbh8lpr5
 len(kpts) = 729
     kpts = [[ 0.          0.          0.        ]
  [ 0.10357615  0.10357615 -0.10357615]

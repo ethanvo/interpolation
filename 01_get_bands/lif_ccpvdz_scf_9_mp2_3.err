@@ -9,5 +9,53 @@ WARNING!
   linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
   to remove the diffused Gaussians whose exponents are less than 0.1.
 
-/cm/local/apps/slurm/var/spool/job10063349/slurm_script: line 21: 2054894 Killed                  python lif_df_dft_mp2.py $1 $2 $3
-slurmstepd: error: Detected 1 oom-kill event(s) in step 10063349.batch cgroup. Some of your processes may have been killed by the cgroup out-of-memory handler.
+Traceback (most recent call last):
+  File "/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/lif_df_dft_mp2.py", line 43, in <module>
+    ekrhf = mymf.kernel()
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/lib/misc.py", line 638, in aliased_fn
+    return getattr(self, fname)(*args, **kwargs)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/scf/hf.py", line 1666, in scf
+    kernel(self, self.conv_tol, self.conv_tol_grad,
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/scf/hf.py", line 128, in kernel
+    vhf = mf.get_veff(mol, dm)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/dft/krks.py", line 96, in get_veff
+    vj = ks.get_j(cell, dm, hermi, kpts, kpts_band)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/scf/khf.py", line 620, in get_j
+    return self.get_jk(cell, dm_kpts, hermi, kpts, kpts_band,
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/scf/khf.py", line 638, in get_jk
+    vj, vk = self.with_df.get_jk(dm_kpts, hermi, kpts, kpts_band,
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df.py", line 750, in get_jk
+    vj = df_jk.get_j_kpts(self, dm, hermi, kpts, kpts_band)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df_jk.py", line 75, in get_j_kpts
+    mydf.build(kpts_band=kpts_band)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df.py", line 595, in build
+    self._make_j3c(self.cell, self.auxcell, kptij_lst, cderi)
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/df.py", line 171, in _make_j3c
+    outcore._aux_e2(cell, fused_cell, fswap, 'int3c2e', aosym='s2',
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/pbc/df/outcore.py", line 258, in _aux_e2
+    feri['%s/%d/%d' % (dataname,k,istep)] = v
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/group.py", line 483, in __setitem__
+    ds = self.create_dataset(None, data=obj)
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/group.py", line 183, in create_dataset
+    dsid = dataset.make_new_dset(group, shape, dtype, data, name, **kwds)
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/dataset.py", line 168, in make_new_dset
+    dset_id.write(h5s.ALL, h5s.ALL, data)
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py/h5d.pyx", line 280, in h5py.h5d.DatasetID.write
+  File "h5py/_proxy.pyx", line 114, in h5py._proxy.dset_rw
+OSError: [Errno 122] Can't synchronously write data (file write failed: time = Tue Dec 19 16:27:16 2023
+, filename = '/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp/tmpju4j1ko_', file descriptor = 6, errno = 122, error message = 'Disk quota exceeded', buf = 0x154719306e70, total write size = 48288, bytes this sub-write = 48288, bytes actually written = 18446744073709551615, offset = 0)
+Exception ignored in: <function H5TmpFile.__del__ at 0x1555405089d0>
+Traceback (most recent call last):
+  File "/burg/berkelbach/users/eav2136/builds/pyscf/projected-cvs/pyscf/pyscf/lib/misc.py", line 914, in __del__
+    self.close()
+  File "/burg/berkelbach/users/eav2136/builds/spack/develop/spack/var/spack/environments/pyscf/.spack-env/view/lib/python3.10/site-packages/h5py/_hl/files.py", line 586, in close
+    self.id._close_open_objects(h5f.OBJ_LOCAL | h5f.OBJ_FILE)
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py/h5f.pyx", line 360, in h5py.h5f.FileID._close_open_objects
+OSError: [Errno 122] Close failed (file write failed: time = Tue Dec 19 16:27:18 2023
+, filename = '/burg/ccce/users/eav2136/projects/interpolation/01_get_bands/tmp/tmpju4j1ko_', file descriptor = 6, errno = 122, error message = 'Disk quota exceeded', buf = 0x3beb780, total write size = 1441792, bytes this sub-write = 1441792, bytes actually written = 18446744073709551615, offset = 0)
+/cm/local/apps/slurm/var/spool/job10633707/slurm_script: line 21: 1814219 Killed                  python lif_df_dft_mp2.py $1 $2 $3
+slurmstepd: error: Detected 1 oom-kill event(s) in step 10633707.batch cgroup. Some of your processes may have been killed by the cgroup out-of-memory handler.
