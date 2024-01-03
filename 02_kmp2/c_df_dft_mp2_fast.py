@@ -17,22 +17,20 @@ from fileutils import load, dump
 
 cell = gto.Cell()
 # Candidate formula of solid: c, si, sic, bn, bp, aln, alp, mgo, mgs, lih, lif, licl
-formula = "lif"
+formula = "c"
 ase_atom = lattice.get_ase_atom(formula)
 cell.atom = pyscf_ase.ase_atoms_to_pyscf(ase_atom)
 cell.a = ase_atom.cell[:]
 cell.unit = 'B'
-cell.basis = {'Li': parse_nwchem.load("/burg/berkelbach/users/eav2136/builds/ccgto/basis/gth-hf-rev/cc-pvdz-lc.dat", 'Li'),
-              'F': parse_nwchem.load("/burg/berkelbach/users/eav2136/builds/ccgto/basis/gth-hf-rev/cc-pvdz-lc.dat", 'F')}
-cell.pseudo = {'Li': "gth-hf-rev-q1",
-               'F': "gth-hf-rev"}
+cell.basis = {'C': parse_nwchem.load("/Users/ethanvo/builds/ccgto/basis/gth-hf-rev/cc-pvdz-lc.dat", 'C')}
+cell.pseudo = "gth-hf-rev"
 cell.verbose = 7
 cell.build()
 
 ##############################
 #  K-point SCF 
 ##############################
-scf_mesh = int(sys.argv[1])
+scf_mesh = 3
 kmesh = [scf_mesh, scf_mesh, scf_mesh]
 scaled_center=[0.0, 0.0, 0.0]
 kpts = cell.make_kpts(kmesh, scaled_center=scaled_center)
@@ -42,7 +40,7 @@ mydf = df.GDF(cell, kpts=kpts)
 mymf.with_df = mydf
 ekrhf = mymf.kernel()
 
-mp2_mesh = int(sys.argv[2])
+mp2_mesh = 3
 kmesh = [mp2_mesh, mp2_mesh, mp2_mesh]
 kpts = cell.make_kpts(kmesh, scaled_center=scaled_center)
 mo_energy, mo_coeff = mymf.get_bands(kpts)
@@ -85,6 +83,7 @@ with h5py.File(mydf._cderi, 'r') as f:
             Lov[ki, kj] = out.reshape(-1, nocc, nvir)
 
 for ki, kj, ka in loop_kkk(nkpts):
+    print("iteration: ", ki*nkpts**2+kj*nkpts+ka)
     kb = kconserv[ki, ka, kj]
     eia = mo_e_o[ki][:, None] - mo_e_v[ka]
     ejb = mo_e_o[kj][:, None] - mo_e_v[kb]
@@ -98,10 +97,3 @@ for ki, kj, ka in loop_kkk(nkpts):
 emp2 /= nkpts
 print("MP2 Correlation Energy: ", emp2)
 total_energy = ekrhf + emp2
-
-datafile = sys.argv[3]
-datadict = {}
-datadict['ekrhf'] = ekrhf
-datadict['ekmp2'] = emp2
-datadict['total_energy'] = total_energy
-dump(datadict, f'data/{datafile}')
