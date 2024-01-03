@@ -86,12 +86,12 @@ for ki, kj, ka in loop_kkk(nkpts):
     kb = kconserv[ki, ka, kj]
     eia = mo_e_o[ki][:, None] - mo_e_v[ka]
     ejb = mo_e_o[kj][:, None] - mo_e_v[kb]
-    eiajb = lib.direct_sum('ia,jb->iajb', eia, ejb)
-    iajb = lib.einsum('Lia,Ljb->iajb', Lov[ki, ka], Lov[kj, kb]) / nkpts
+    eiajb = lib.direct_sum('ia,jb->iajb', eia, ejb).ravel()
+    iajb = np.dot(Lov[ki, ka].reshape(naux, nocc*nvir).T, Lov[kj, kb].reshape(naux, nocc*nvir)).ravel() / nkpts
     t2 = np.conj(iajb / eiajb)
-    ibja = lib.einsum('Lib,Lja->ibja', Lov[ki, kb], Lov[kj, ka]) / nkpts
-    emp2 += 2*lib.einsum('iajb,iajb', t2, iajb).real
-    emp2 -=   lib.einsum('iajb,ibja', t2, ibja).real
+    ibja = np.dot(Lov[ki, kb].reshape(naux, nocc*nvir).T, Lov[kj, ka].reshape(naux, nocc*nvir)).reshape(nocc, nvir, nocc, nvir).transpose(0, 3, 2, 1).ravel() / nkpts
+    emp2 += 2*np.dot(t2.T, iajb).real
+    emp2 -= np.dot(t2.T, ibja).real
 
 emp2 /= nkpts
 print("MP2 Correlation Energy: ", emp2)
