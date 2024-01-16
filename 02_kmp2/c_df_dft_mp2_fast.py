@@ -10,6 +10,8 @@ from pyscf.ao2mo import _ao2mo
 import h5py
 import sys
 from fileutils import load, dump
+import itertools
+import multiprocessing
 
 ##############################
 # Create a "Cell"
@@ -82,8 +84,22 @@ with h5py.File(mydf._cderi, 'r') as f:
             out = _ao2mo.r_e2(Lpq, mo, (bra_start, bra_end, ket_start, ket_end), tao, ao_loc)
             Lov[ki, kj] = out.reshape(-1, nocc, nvir)
 
+def get_eiajb(ki, kj, ka, mo_e_o, mo_e_v):
+    kb = kconserv[ki, ka, kj]
+    eia = mo_e_o[ki][:, None] - mo_e_v[ka]
+    ejb = mo_e_o[kj][:, None] - mo_e_v[kb]
+    eiajb = lib.direct_sum('ia,jb->iajb', eia, ejb).ravel()
+    return eiajb
+
+def mp2(Lia, Lja, Lib, Ljb, eiajb, nkpts, nocc, nvir, naux):
+    iajb = np.dot(Lia.reshape(naux, nocc*nvir).T, Ljb.reshape(naux, nocc*nvir)).ravel() / nkpts
+    t2 = np.conj(iajb / eiajb)
+    ibja = np.dot(Lib.reshape(naux, nocc*nvir).T, Lja.reshape(naux, nocc*nvir)).reshape(nocc, nvir, nocc, nvir).transpose(0, 3, 2, 1).ravel() / nkpts
+    emp2_local = 2*np.dot(t2.T, iajb).real
+    emp2_local -= np.dot(t2.T, ibja).real
+    return emp2_local
+
 for ki, kj, ka in loop_kkk(nkpts):
-    print("iteration: ", ki*nkpts**2+kj*nkpts+ka)
     kb = kconserv[ki, ka, kj]
     eia = mo_e_o[ki][:, None] - mo_e_v[ka]
     ejb = mo_e_o[kj][:, None] - mo_e_v[kb]
