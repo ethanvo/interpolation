@@ -2,4 +2,5 @@
 The following have been reloaded with a version change:
   1) gcc/10.2.0 => gcc/13.0.1
 
-slurmstepd: error: *** JOB 10633605 ON g149 CANCELLED AT 2023-12-19T15:13:27 DUE TO TIME LIMIT ***
+==> Error: Spec 'gcc@13.2.0' matches no installed packages.
+==> Error: Spec 'intel-oneapi-compilers' matches no installed packages.
